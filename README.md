@@ -1,7 +1,6 @@
 # Run-Length Encoded Mask Operations
 
-This library is an extended and improved version of the [COCO API](https://github.com/cocodataset/cocoapi)'
-s `pycocotools.mask` module written by Piotr Dollár and Tsung-Yi Lin.
+This library is an extended and improved version of the [COCO API](https://github.com/cocodataset/cocoapi)'s `pycocotools.mask` module written by Piotr Dollár and Tsung-Yi Lin.
 
 It offers the following additional features:
 
