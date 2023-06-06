@@ -38,6 +38,14 @@ import rlemasklib.rlemasklib_cython as rlemasklib_cython
 
 
 def area(rleObjs):
+    """Compute the foreground area for a mask or multiple masks.
+
+    Args:
+        rleObjs: either a single RLE or a list of RLEs
+
+    Returns:
+        A scalar if input was a single RLE, otherwise a list of scalars.
+    """
     if isinstance(rleObjs, (tuple, list)):
         return rlemasklib_cython.area(rleObjs)
     else:
@@ -45,20 +53,59 @@ def area(rleObjs):
 
 
 def complement(rleObjs):
+    """Compute the complement of a mask or multiple masks.
+
+    Args:
+        rleObjs: either a single RLE or a list of RLEs
+
+    Returns:
+        A single RLE or a list of RLEs, depending on input type.
+    """
     if isinstance(rleObjs, (tuple, list)):
         return rlemasklib_cython.complement(rleObjs)
     else:
         return rlemasklib_cython.complement([rleObjs])[0]
 
 
-def encode(mask, zlevel=None):
+def encode(mask, compressed=True, zlevel=None):
+    """Encode binary mask into a compressed RLE.
+
+    Args:
+        mask: a binary mask (numpy 2D array of any type, where zero is background and nonzero is foreground)
+        compressed: whether to compress the RLE using the LEB128-like algorithm from COCO (and potentially zlib afterwards).
+        zlevel: zlib compression level. None means no zlib compression, numbers up to 9 are increasing zlib compression
+            levels and -1 is the default level in zlib. It has no effect if compressed=False.
+
+    Returns:
+        An encoded RLE object with a size field:
+            size: (height, width) of the mask
+        And one of the following fields:
+            ucounts: uncompressed run-length counts
+            counts: LEB128-like compressed run-length counts
+            zcounts: zlib-compressed LEB128-like compressed run-length counts
+    """
     encoded = _encode(np.asfortranarray(mask.astype(np.uint8)))
+
+    if not compressed:
+        # TODO: we could directly generate uncompressed RLEs as well
+        return decompress(encoded)
+
     if zlevel is not None:
         return compress(encoded, zlevel=zlevel)
+
     return encoded
 
 
 def decode(encoded_mask):
+    """Decode a (potentially compressed) RLE encoded mask.
+
+    Args:
+        encoded_mask: encoded RLE object
+
+    Returns:
+        A binary mask (numpy 2D array of type uint8, where 0 is background and 1 is foreground)
+    """
+
     if 'zcounts' in encoded_mask:
         encoded_mask = dict(
             size=encoded_mask['size'],
@@ -71,6 +118,16 @@ def decode(encoded_mask):
 
 
 def crop(rleObjs, bbox):
+    """Crop a mask or multiple masks (RLEs) by the given bounding box.
+    The size of each output RLE is the same as the size of the corresponding bounding box.
+
+    Args:
+        rleObjs: either a single RLE or a list of RLEs
+        bbox: either a single bounding box or a list of bounding boxes, in the format [x_start, y_start, width, height]
+
+    Returns:
+        Either a single RLE or a list of RLEs, depending on input type.
+    """
     bbox = np.asanyarray(bbox, dtype=np.uint32)
     if isinstance(rleObjs, (tuple, list)):
         return rlemasklib_cython.crop(rleObjs, bbox)
@@ -80,6 +137,14 @@ def crop(rleObjs, bbox):
 
 
 def to_bbox(rleObjs):
+    """Convert an RLE mask or multiple RLE masks to a bounding box or a list of bounding boxes.
+
+    Args:
+        rleObjs: either a single RLE or a list of RLEs
+
+    Returns:
+        bbox(es): either a single bounding box or a list of bounding boxes, in the format [x_start, y_start, width, height]
+    """
     if isinstance(rleObjs, (tuple, list)):
         return rlemasklib_cython.toBbox(rleObjs).astype(np.float32)
     else:
@@ -94,28 +159,76 @@ def get_imshape(imshape=None, imsize=None):
 
 
 def from_bbox(bbox, imshape=None, imsize=None):
+    """Connvert a bounding box to an RLE mask of the given size.
+
+    Args:
+        bbox: a bounding box, in the format [x_start, y_start, width, height]
+        imshape: [height, width] of the desired mask (either this or imsize must be provided)
+        imsize: [width, height] of the desired mask (either this or imshape must be provided)
+
+    Returns:
+        An RLE mask.
+    """
     imshape = get_imshape(imshape, imsize)
     bbox = np.asanyarray(bbox, dtype=np.float64)
     return rlemasklib_cython.frBbox(bbox[np.newaxis], imshape[0], imshape[1])[0]
 
 
 def from_polygon(poly, imshape=None, imsize=None):
+    """Convert a polygon to an RLE mask of the given size.
+
+    Args:
+        poly: a polygon (list of xy coordinates)
+        imshape: [height, width] of the desired mask (either this or imsize must be provided)
+        imsize: [width, height] of the desired mask (either this or imshape must be provided)
+
+    Returns:
+        An RLE mask.
+    """
     imshape = get_imshape(imshape, imsize)
     poly = np.asanyarray(poly, dtype=np.float64)
     return rlemasklib_cython.frPoly(poly[np.newaxis], imshape[0], imshape[1])[0]
 
 
 def empty(imshape=None, imsize=None):
+    """Create an empty (fully background) RLE mask of the given size.
+
+    Args:
+        imshape: [height, width] of the desired mask (either this or imsize must be provided)
+        imsize: [width, height] of the desired mask (either this or imshape must be provided)
+
+    Returns:
+        An empty RLE mask.
+    """
     imshape = get_imshape(imshape, imsize)
     return compress({'size': imshape[:2], 'ucounts': [imshape[0] * imshape[1]]})
 
 
 def full(imshape=None, imsize=None):
+    """Create a full (fully foreground) RLE mask of the given size.
+
+    Args:
+        imshape: [height, width] of the desired mask (either this or imsize must be provided)
+        imsize: [width, height] of the desired mask (either this or imshape must be provided)
+
+    Returns:
+        A full RLE mask.
+    """
     imshape = get_imshape(imshape, imsize)
     return compress({'size': imshape[:2], 'ucounts': [0, imshape[0] * imshape[1]]})
 
 
 def decompress(encoded_mask):
+    """Decompress a compressed RLE mask to a decompressed RLE. Note that this does not decode the RLE into a binary mask.
+
+    Args:
+        encoded_mask:
+
+    Returns:
+        An RLE mask dictionary
+           'size': [height, width]
+           'ucounts': uint32 array of uncompressed run-lengths.
+    """
     if 'zcounts' in encoded_mask:
         encoded_mask = dict(
             size=encoded_mask['size'],
@@ -125,6 +238,16 @@ def decompress(encoded_mask):
 
 
 def compress(rle, zlevel=None):
+    """Compress an RLE mask to a compressed RLE. Note that the input needs to be an RLE, not a decoded binary mask.
+
+    Args:
+        rle: a mask in RLE format
+        zlevel: optional zlib compression level, None means no zlib compression, -1 is zlib's default compression level
+           and 0-9 are zlib's compression levels where 9 is maximum compression.
+
+    Returns:
+        A compressed RLE mask.
+    """
     if 'ucounts' in rle:
         rle = _compress(rle)
 
@@ -136,18 +259,22 @@ def compress(rle, zlevel=None):
 
 
 def union(masks):
+    """Compute the union of multiple RLE masks."""
     return rlemasklib_cython.merge(masks, intersect=False)
 
 
 def intersection(masks):
+    """Compute the intersection of multiple RLE masks."""
     return rlemasklib_cython.merge(masks, intersect=True)
 
 
 def difference(mask1, mask2):
+    """Compute the difference between two RLE masks, i.e., the mask where mask1 is foreground and mask2 is background."""
     return intersection([mask1, complement(mask2)])
 
 
 def symmetric_difference(mask1, mask2):
+    """Compute the symmetric difference between two RLE masks, i.e., the mask where either mask1 or mask2 is foreground but not both."""
     return difference(union([mask1, mask2]), intersection([mask1, mask2]))
 
 
