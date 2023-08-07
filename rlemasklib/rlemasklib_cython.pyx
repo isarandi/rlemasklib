@@ -1,5 +1,6 @@
+# cython: language_level=3
 # distutils: language = c
-# distutils: sources = rlemasklib.c
+# distutils: sources = rlemasklib/rlemasklib.c
 
 #**************************************************************************
 # Based on code from the Microsoft COCO Toolbox.      version 2.0

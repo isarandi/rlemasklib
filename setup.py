@@ -7,7 +7,7 @@ from setuptools import setup, Extension
 ext_modules = [
     Extension(
         'rlemasklib.rlemasklib_cython',
-        sources=['rlemasklib/rlemasklib.c', 'rlemasklib/rlemasklib_cython.pyx'],
+        sources=['rlemasklib/rlemasklib_cython.pyx'],
         include_dirs=[np.get_include(), 'rlemasklib'],
         extra_compile_args=['-Wno-cpp', '-Wno-unused-function', '-std=c99'],
     )
