@@ -18,6 +18,7 @@ setup(
     packages=['rlemasklib'],
     install_requires=[
         'setuptools>=18.0',
+        'numpy',
         'cython>=0.27.3',
     ],
     version='0.1.0',
