@@ -40,4 +40,4 @@ It offers the following additional features:
 ### Conversions
 - `[x_start, y_start, width, height] = rlemasklib.to_bbox(rle_mask)`: Convert an RLE mask to a bounding box.
 - `rle_mask = rlemasklib.from_bbox([x_start, y_start, width, height], imshape)`: Convert a bounding box to an RLE mask inside a given image size.
-- `rle_mask = rlemasklib.from_polygon(polygon)`: Convert a polygon to an RLE mask inside a given image size.
+- `rle_mask = rlemasklib.from_polygon(polygon, imshape)`: Convert a polygon to an RLE mask inside a given image size.
