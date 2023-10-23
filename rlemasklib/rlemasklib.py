@@ -310,3 +310,11 @@ def _decode_uncompressed(rleObjs):
         return rlemasklib_cython.decodeUncompressed(rleObjs)
     else:
         return rlemasklib_cython.decodeUncompressed([rleObjs])[:, :, 0]
+
+
+def iou(masks):
+    union_ = area(union(masks))
+    if union_ == 0:
+        return 0
+    intersection_ = area(intersection(masks))
+    return intersection_ / union_
