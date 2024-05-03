@@ -43,6 +43,9 @@ void rleComplement(const RLE *R, RLE *M, siz n);
 /* Crop encoded masks. */
 void rleCrop(const RLE *R, RLE *M, siz n, const uint *bbox);
 
+/* Pad encoded masks. */
+void rlePad(const RLE *R, RLE *M, siz n, const uint *pad_amounts);
+
 /* Compute intersection over union between masks. */
 void rleIou(RLE *dt, RLE *gt, siz m, siz n, byte *iscrowd, double *o);
 
@@ -72,3 +75,17 @@ void rleFrString(RLE *R, char *s, siz h, siz w);
 
 /* Remove zero runlengths from RLE encoding, and sum up the neighbors accordingly. */
 void rleEliminateZeroRuns(RLE *R, siz n);
+
+/* Compute connected components of encoded masks */
+void rleConnectedComponents(const RLE *R_in, int connectivity, RLE **components, siz *n);
+
+/* Split runs that may belong to different connected components */
+RLE *rleSplitRunsThatMayBelongToDifferentComponents(const RLE *R, int connectivity);
+
+// Union-find data structure for connected components
+struct UnionFind {
+    struct UnionFind *parent;
+    uint rank;
+};
+struct UnionFind *uf_find(struct UnionFind *x);
+void uf_union(struct UnionFind *x, struct UnionFind *y);

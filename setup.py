@@ -3,7 +3,6 @@ from setuptools import setup, Extension
 
 # To compile and install locally run "python setup.py build_ext --inplace"
 # To install library to Python site-packages run "python setup.py build_ext install"
-
 ext_modules = [
     Extension(
         'rlemasklib.rlemasklib_cython',
@@ -15,13 +14,14 @@ ext_modules = [
 
 setup(
     name='rlemasklib',
+    version='0.2.0',
+    author='István Sárándi',
+    author_email='istvan.sarandi@uni-tuebingen.de',
     packages=['rlemasklib'],
     install_requires=[
         'setuptools>=18.0',
         'numpy',
         'cython>=0.27.3',
     ],
-    version='0.1.0',
     ext_modules=ext_modules
 )
-

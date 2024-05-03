@@ -24,9 +24,7 @@ void rleInit(RLE *R, siz h, siz w, siz m, uint *cnts) {
     R->m = m;
     R->cnts = (m == 0) ? 0 : malloc(sizeof(uint) * m);
     if (cnts) {
-        for (siz j = 0; j < m; j++) {
-            R->cnts[j] = cnts[j];
-        }
+        memcpy(R->cnts, cnts, sizeof(uint) * m);
     }
 }
 
@@ -163,20 +161,18 @@ void rleComplement(const RLE *R, RLE *M, siz n) {
     siz i, h, w;
     uint *cnts;
     for (i = 0; i < n; i++) {
-        if (R[i].m) {
-            h = R[i].h;
-            w = R[i].w;
-            if (R[i].cnts[0] == 0) {
-                rleInit(M + i, h, w, R[i].m - 1, R[i].cnts + 1);
-            } else {
-                cnts = malloc(sizeof(uint) * (R[i].m + 1));
-                cnts[0] = 0;
-                memcpy(cnts + 1, R[i].cnts, sizeof(uint) * R[i].m);
-                (M + i)->cnts = cnts;
-                (M + i)->h = h;
-                (M + i)->w = w;
-                (M + i)->m = R[i].m + 1;
-            }
+        h = R[i].h;
+        w = R[i].w;
+        if (R[i].m > 0 && R[i].cnts[0] == 0) {
+            rleInit(M + i, h, w, R[i].m - 1, R[i].cnts + 1);
+        } else {
+            cnts = malloc(sizeof(uint) * (R[i].m + 1));
+            cnts[0] = 0;
+            memcpy(cnts + 1, R[i].cnts, sizeof(uint) * R[i].m);
+            (M + i)->cnts = cnts;
+            (M + i)->h = h;
+            (M + i)->w = w;
+            (M + i)->m = R[i].m + 1;
         }
     }
 }
@@ -252,6 +248,254 @@ void rleCrop(const RLE *R, RLE *M, siz n, const uint *bbox) {
 }
 
 
+
+void rlePad(const RLE *R, RLE *M, siz n, const uint *pad_amounts) {
+    // pad_amounts is four values: left, right, top, bottom
+    /* Crop RLEs to a specified bounding box.*/
+    for (siz i = 0; i < n; i++) {
+        uint h = R[i].h;
+        uint w = R[i].w;
+        siz m = R[i].m;
+
+        uint h_out = h + pad_amounts[2] + pad_amounts[3];
+        uint w_out = w + pad_amounts[0] + pad_amounts[1];
+
+        if (w_out == 0 || h_out == 0) {
+            // RLE is empty, so just fill in zeros.
+            rleInit(M + i, h_out, w_out, 0, NULL);
+            continue;
+        }
+
+        if (m == 0 || w == 0 || h == 0) {
+            // RLE is empty, so just fill in zeros.
+            rleInit(M + i, h_out, w_out, 1, NULL);
+            M[i].cnts[0] = h_out * w_out;
+            continue;
+        }
+
+        uint start_px_addition = pad_amounts[0] * h_out + pad_amounts[2];
+        uint end_px_addition = pad_amounts[1] * h_out + pad_amounts[3];
+
+        if (pad_amounts[2] + pad_amounts[3] == 0) {
+            // If there's no vertical padding, we can just copy the RLE and add the horizontal padding.
+            if (m % 2 == 0 && end_px_addition > 0) {
+                // if num of runs is even, it ends with a run of 1s. If we add padding at the end
+                // we need to add a new run.
+                rleInit(M + i, h_out, w_out, m + 1, NULL);
+                memcpy(M[i].cnts, R[i].cnts, sizeof(uint) * m);
+                M[i].cnts[0] += start_px_addition;
+                M[i].cnts[m] = end_px_addition;
+            } else {
+                rleInit(M + i, h_out, w_out, m, R[i].cnts);
+                M[i].cnts[0] += + start_px_addition;
+                M[i].cnts[m - 1] += end_px_addition;
+            }
+            continue;
+        }
+
+        // We don't know how many runs will be added, as some runs of 1s may be split into multiple, when a padding is
+        // added and the run was spanning multiple columns.
+        // Therefore, we first do a pass just to calculate the number of runs that will be in the result.
+        siz m_out = m;
+        uint y = 0;
+        for (siz j = 0; j < m; ++j) {
+            // if this is a run of 1s, it may need to be split. Runs of 0s will just be expanded, never split
+            if (j % 2 == 1) {
+                // how many columns this run spans:
+                // ie the last pixel of this run is how many columns to the right of the first pixel of this run
+                m_out += ((y + R[i].cnts[j] - 1) / h) * 2;
+            }
+            y = (y + R[i].cnts[j]) % h;
+        }
+
+        // if num of runs is even, it ends with a run of 1s. If we add padding at the end, we need to add a new run.
+        if (m % 2 == 0 && end_px_addition > 0) {
+            ++m_out;
+        }
+
+        rleInit(M + i, h_out, w_out, m_out, NULL);
+        uint *cnts = M[i].cnts;
+        y = 0;
+        siz j_out = 0;
+        bool carry_over = false;
+        uint pad_vertical = pad_amounts[2] + pad_amounts[3];
+        for (siz j = 0; j < m; ++j) {
+            uint n_cols_spanned = (y + R[i].cnts[j] - 1) / h;
+            uint n_cols_completed = (y + R[i].cnts[j]) / h;
+            if (j%2 == 0) {
+                // run of 0s, make it longer
+                cnts[j_out++] = R[i].cnts[j] + n_cols_completed * pad_vertical + (carry_over ? pad_vertical : 0);
+            } else {
+                // run of 1s
+                if (n_cols_spanned > 0) {
+                    cnts[j_out++] = h - y; // 1s
+                    for (siz k = 0; k < n_cols_spanned-1; ++k) {
+                        cnts[j_out++] = pad_vertical; // 0s
+                        cnts[j_out++] = h; // 1s
+                    }
+                    cnts[j_out++] = pad_vertical; // 0s
+                    cnts[j_out++] = y + R[i].cnts[j] - n_cols_spanned * h; // 1s
+                } else {
+                    cnts[j_out++] = R[i].cnts[j];
+                }
+                carry_over = n_cols_completed > n_cols_spanned;
+            }
+            y = (y + R[i].cnts[j]) % h;
+        }
+
+        cnts[0] += start_px_addition;
+
+        if (m%2 == 0) {
+            // original ends with 1s run
+            if (end_px_addition > 0) {
+                // new run of 0s is the last one
+                cnts[m_out - 1] = end_px_addition;
+            }
+            // else, the last run of 1s is already good
+        } else {
+            // original ends with 0s run, so we extend it
+            // it was already extended by pad_vertical in the for loop above
+            cnts[m_out - 1] += end_px_addition - pad_vertical;
+        }
+
+    }
+}
+
+
+void rleConnectedComponents(const RLE *R_in, int connectivity, RLE **components, siz *n_components_out) {
+    bool diagonal = (connectivity == 8);
+    if (R_in->m <= 1) {
+        *n_components_out = 0;
+        *components = NULL;
+        return;
+    }
+    RLE *R_split = rleSplitRunsThatMayBelongToDifferentComponents(R_in, connectivity);
+    const RLE *R = R_split ? R_split : R_in;
+
+    siz m = R->m;
+    siz h = R->h;
+    siz w = R->w;
+    uint *cnts = R->cnts;
+
+    struct UnionFind *uf = calloc(m / 2, sizeof(struct UnionFind));
+    // Forward scanning for label updates
+    siz i1 = 1, i2 = 1, r1 = cnts[0], r2 = cnts[0];
+    while (i1 < m && i2 < m) {
+        // If the runs overlap vertically and are in neighboring columns, we need to update the labels
+        siz overlap_start = umax(r1 + h, r2);
+        siz overlap_end = umin(r1 + cnts[i1] + h, r2 + cnts[i2]);
+        if (overlap_start < overlap_end || (diagonal && overlap_start == overlap_end && overlap_start % h != 0)) {
+            uf_union(&uf[i1 / 2], &uf[i2 / 2]);
+        }
+
+        // Step to the next run. Advance either the first or the second run, depending on which one ends first
+        // Taking into account that we need a lag of h between the runs to be in neighboring columns.
+        if (r1 + cnts[i1] + h < r2 + cnts[i2]) {
+            if (i1 + 1 >= m)
+                break;
+            r1 += cnts[i1] + cnts[i1 + 1];
+            i1 += 2;
+        } else {
+            if (i2 + 1 >= m)
+                break;
+            r2 += cnts[i2] + cnts[i2 + 1];
+            i2 += 2;
+        }
+    }
+
+    // Now, create new components based on the labels
+    // we can potentially have as many components as runs of 1s, but we will likely have fewer
+    // because some runs of 1s may be connected. Hence, we first count the number of unique labels that remained
+    // after the forward and backward passes.
+    // This will be the rle.m of the new components
+    uint *new_label_to_component_m = malloc(sizeof(uint) * m / 2);
+    // This is the mapping from the old label index to the new compacted label index
+    uint *label_to_new_label = malloc(sizeof(uint) * m / 2);
+    // fill with m to indicate that the label has not been used yet
+    for (siz i = 0; i < m / 2; i++) {
+        label_to_new_label[i] = m; // m indicates that the label has not been used yet
+    }
+
+    // This is the number of labels we have found so far
+    siz n_components = 0;
+    uint *new_labels = malloc(sizeof(uint) * m / 2);
+    for (siz i = 1; i < m; i += 2) {
+        uint label = (uint) (uf_find(&uf[i / 2]) - uf);
+        uint new_label;
+        if (label_to_new_label[label] == m) {
+            label_to_new_label[label] = n_components;
+            new_label_to_component_m[n_components] = 1;
+            new_label = n_components;
+            ++n_components;
+        } else {
+            new_label = label_to_new_label[label];
+        }
+        new_labels[i / 2] = new_label;
+        // A new pair of runs is not added if the previous label was the same and the run of 0s was empty
+        // This happens if a run of 1s got split earlier but then turned out to belong to the same component.
+        if (i==1 || new_label != new_labels[i / 2 - 1] || cnts[i - 1] > 0) {
+            new_label_to_component_m[new_label] += 2;
+        }
+    }
+    *n_components_out = n_components;
+
+    // Now that we know how many runs each component will have, we can initialize the components
+    rlesInit(components, n_components);
+    RLE* rles_out = *components;
+    for (siz i = 0; i < n_components; i++) {
+        rleInit(&rles_out[i], h, w, new_label_to_component_m[i], NULL);
+        rles_out[i].cnts[0] = cnts[0]; // the first run of zeroes will be part of all components
+    }
+
+    // Now we can fill in the components. The next pointer will point to the next run of each component.
+    uint **next_pointer = malloc(sizeof(uint *) * n_components);
+    for (siz i = 0; i < n_components; i++) {
+        next_pointer[i] = rles_out[i].cnts + 1;
+    }
+
+    // Now we scan over the original RLE runs and depending on its label, we update the components.
+    // The component for that label will be updated with the run of 1s and the following run of 0s.
+    // All other components will get their last run of 0s extended.
+    siz r = cnts[0];
+    for (siz i = 1; i < m; i += 2) {
+        uint current_count_1s = cnts[i];
+        uint next_count_0s = (i + 1 < R->m) ? cnts[i + 1] : 0;
+        uint new_label = new_labels[i / 2];
+
+        if (next_pointer[new_label] > 1 + rles_out[new_label].cnts && *(next_pointer[new_label] - 1) == 0) {
+            // The new run belongs to the same label as the previous and the run of 0s inbetween has size 0,
+            // so we just extend the previous run of 1s and 0s.
+            *(next_pointer[new_label] - 2) += current_count_1s;
+            *(next_pointer[new_label] - 1) += next_count_0s;
+        } else {
+            // We must add a new pair of runs
+            *(next_pointer[new_label]) = current_count_1s;
+            *(next_pointer[new_label] + 1) = next_count_0s;
+            next_pointer[new_label] += 2;
+        }
+
+        for (siz j = 0; j < n_components; j++) {
+            if (j != new_label) {
+                // We extend the last run of 0s of all other components
+                *(next_pointer[j] - 1) += current_count_1s + next_count_0s;
+            }
+        }
+        r += current_count_1s + next_count_0s;
+    }
+
+    // Clean up
+    free(new_label_to_component_m);
+    free(label_to_new_label);
+    free(next_pointer);
+    free(new_labels);
+    if (R_split) {
+        rleFree(R_split);
+        free(R_split);
+    }
+    free(uf);
+
+}
+
 void rleEliminateZeroRuns(RLE *R, siz n) {
     siz i, j, k;
     for (i = 0; i < n; ++i) {
@@ -269,6 +513,47 @@ void rleEliminateZeroRuns(RLE *R, siz n) {
         }
         R[i].m = k + 1;
     }
+}
+
+RLE *rleSplitRunsThatMayBelongToDifferentComponents(const RLE *R, int connectivity) {
+    // A run of 1s may belong to different connected components if it spans more than one column
+    // and its length is less than the height of the image. If it's exactly the height of the image it does not
+    // split if connectivity is 8, but it might if connectivity is 4. If it has larger length, it will never split.
+    siz j;
+    int diagonal = connectivity == 8;
+    uint h = R->h;
+    uint w = R->w;
+    siz m = R->m;
+    siz r = 0;
+    siz n_splits = 0;
+    for (j = 0; j < m; ++j) {
+        if (j % 2 == 1 && R->cnts[j] <= h + (diagonal ? 1 : 0) && (r + R->cnts[j] - 1) / h > r / h) {
+            ++n_splits;
+        }
+        r += R->cnts[j];
+    }
+
+    if (n_splits == 0) {
+        return NULL;
+    }
+
+    RLE *M = malloc(sizeof(RLE));  // This memory will be freed by the caller
+    rleInit(M, h, w, m + 2 * n_splits, NULL);
+    r = 0;
+    siz i_out = 0;
+    for (j = 0; j < m; ++j) {
+        if (j % 2 == 1 && R->cnts[j] <= h + (diagonal ? 1 : 0) && (r + R->cnts[j] - 1) / h > r / h) {
+            M->cnts[i_out] = h - r % R->h;
+            M->cnts[i_out + 1] = 0;
+            M->cnts[i_out + 2] = R->cnts[j] - M->cnts[i_out];
+            i_out += 3;
+        } else {
+            M->cnts[i_out] = R->cnts[j];
+            ++i_out;
+        }
+        r += R->cnts[j];
+    }
+    return M;
 }
 
 void rleIou(RLE *dt, RLE *gt, siz m, siz n, byte *iscrowd, double *o) {
@@ -628,3 +913,32 @@ void rleFrString(RLE *R, char *s, siz h, siz w) {
     free(cnts);
 }
 
+// Union-find data structure for tracking connected components
+struct UnionFind *uf_find(struct UnionFind *x) {
+    struct UnionFind *z = x;
+    while (z->parent) {
+        z = z->parent;
+    }
+    while (x->parent) {
+        struct UnionFind *tmp = x->parent;
+        x->parent = z;
+        x = tmp;
+    }
+    return z;
+}
+
+void uf_union(struct UnionFind *x, struct UnionFind *y) {
+    x = uf_find(x);
+    y = uf_find(y);
+    if (x == y) {
+        return;
+    }
+    if (x->rank < y->rank) {
+        x->parent = y;
+    } else {
+        y->parent = x;
+        if (x->rank == y->rank) {
+            x->rank++;
+        }
+    }
+}

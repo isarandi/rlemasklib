@@ -44,6 +44,7 @@ cdef extern from "rlemasklib.h":
     void rleArea(const RLE *R, siz n, uint *a)
     void rleComplement(const RLE *R_in, RLE *R_out, siz n)
     void rleCrop(const RLE *R_in, RLE *R_out, siz n, const uint * bbox);
+    void rlePad(const RLE *R_in, RLE *R_out, siz n, const uint * pad_amounts);
     void rleIou(RLE *dt, RLE *gt, siz m, siz n, byte *iscrowd, double *o)
     void bbIou(BB dt, BB gt, siz m, siz n, byte *iscrowd, double *o)
     void rleToBbox(const RLE *R, BB bb, siz n)
@@ -51,6 +52,7 @@ cdef extern from "rlemasklib.h":
     void rleFrPoly(RLE *R, const double *xy, siz k, siz h, siz w)
     char * rleToString(const RLE *R)
     void rleFrString(RLE *R, char *s, siz h, siz w)
+    void rleConnectedComponents(const RLE *R_in, int connectivity, RLE **components, siz *n);
 
 # python class to wrap RLE array in C
 # the class handles the memory allocation and deallocation
@@ -126,10 +128,11 @@ def decompress(rleObjs):
     objs = []
     for i in range(n):
         shape[0] = <np.npy_intp> Rs._R[i].m
-        objs.append({
-            'size': [Rs._R[i].h, Rs._R[i].w],
-            'ucounts': np.PyArray_SimpleNewFromData(1, shape, np.NPY_UINT32, Rs._R[i].cnts).copy()
-        })
+        ucounts = np.PyArray_SimpleNewFromData(1, shape, np.NPY_UINT32, Rs._R[i].cnts)
+        # We steal ownership from the RLEs object as it will get destroyed at the end of this function
+        PyArray_ENABLEFLAGS(ucounts, np.NPY_OWNDATA)
+        Rs._R[i].cnts = <uint *> 0
+        objs.append({'size': [Rs._R[i].h, Rs._R[i].w], 'ucounts': ucounts})
     return objs
 
 # internal conversion from compressed RLE format to Python RLEs object
@@ -206,6 +209,12 @@ def crop(rleObjs, np.ndarray[np.uint32_t, ndim=2] bb):
     cdef RLEs Rs_in = _frString(rleObjs)
     cdef RLEs Rs_out = RLEs(Rs_in._n)
     rleCrop(Rs_in._R, Rs_out._R, Rs_in._n, <const uint *> bb.data)
+    return _toString(Rs_out)
+
+def pad(rleObjs, np.ndarray[np.uint32_t, ndim=1] paddings):
+    cdef RLEs Rs_in = _frString(rleObjs)
+    cdef RLEs Rs_out = RLEs(Rs_in._n)
+    rlePad(Rs_in._R, Rs_out._R, Rs_in._n, <const uint *> paddings.data)
     return _toString(Rs_out)
 
 def complement(rleObjs):
@@ -356,3 +365,9 @@ def frPyObjects(pyobj, h, w):
     else:
         raise Exception('input type is not supported.')
     return objs
+
+def connectedComponents(rleObj, connectivity=4):
+    cdef RLEs Rs = _frString([rleObj])
+    cdef RLEs Rs_out = RLEs(0)
+    rleConnectedComponents(<RLE *> Rs._R, connectivity, &Rs_out._R, &Rs_out._n)
+    return _toString(Rs_out)

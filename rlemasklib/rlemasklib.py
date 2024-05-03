@@ -1,9 +1,6 @@
 import zlib
-
 import numpy as np
 import rlemasklib.rlemasklib_cython as rlemasklib_cython
-
-
 # Interface for manipulating masks stored in RLE format.
 #
 # RLE is a simple yet efficient format for storing binary masks. RLE
@@ -135,6 +132,28 @@ def crop(rleObjs, bbox):
         rleObjs_out = rlemasklib_cython.crop([rleObjs], bbox[np.newaxis])
         return rleObjs_out[0]
 
+def _pad(rleObjs, paddings):
+    """Pad a mask or multiple masks (RLEs) by the given padding amounts.
+
+    Args:
+        rleObjs: either a single RLE or a list of RLEs
+        paddings: left,right,top,bottom
+
+    Returns:
+        Either a single RLE or a list of RLEs, depending on input type.
+    """
+    paddings = np.asanyarray(paddings, dtype=np.uint32)
+    if isinstance(rleObjs, (tuple, list)):
+        return rlemasklib_cython.pad(rleObjs, paddings)
+    else:
+        rleObjs_out = rlemasklib_cython.pad([rleObjs], paddings)
+        return rleObjs_out[0]
+
+def pad(rleObjs, paddings, value=0):
+    if value == 0:
+        return _pad(rleObjs, paddings)
+    else:
+        return complement(_pad(complement(rleObjs), paddings))
 
 def to_bbox(rleObjs):
     """Convert an RLE mask or multiple RLE masks to a bounding box or a list of bounding boxes.
@@ -318,3 +337,42 @@ def iou(masks):
         return 0
     intersection_ = area(intersection(masks))
     return intersection_ / union_
+
+
+def connected_components(rle, connectivity=4):
+    return rlemasklib_cython.connectedComponents(rle, connectivity)
+def shift(rle, offset, border_value=0):
+    if offset == (0,0):
+        return rle
+    h, w = rle['size']
+    paddings = np.maximum(0, np.array([offset[0], -offset[0], offset[1], -offset[1]]))
+    cropbox = np.maximum(0,  np.array([-offset[0], -offset[1], w, h]))
+    return crop(pad(rle, paddings, border_value), cropbox)
+
+def erode(rle, connectivity=4):
+    return complement(dilate(complement(rle), connectivity))
+
+def dilate(rle, connectivity=4):
+    if connectivity == 4:
+        neighbor_offsets = [(0,1), (0,-1), (1,0), (-1,0)]
+    else:
+        neighbor_offsets = [(0,1), (0,-1), (1,0), (-1,0), (1,1), (-1,-1), (1,-1), (-1,1)]
+    return union([rle] + [shift(rle, offset) for offset in neighbor_offsets])
+
+def opening(rle, connectivity=4):
+    return dilate(erode(rle, connectivity), connectivity)
+
+def closing(rle, connectivity=4):
+    return erode(dilate(rle, connectivity), connectivity)
+
+def erode2(rle):
+    return complement(dilate2(complement(rle)))
+
+def dilate2(rle):
+    return dilate(dilate(rle, 4), 8)
+
+def opening2(rle):
+    return dilate2(erode2(rle))
+
+def closing2(rle):
+    return erode2(dilate2(rle))
