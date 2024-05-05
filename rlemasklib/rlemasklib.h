@@ -5,6 +5,7 @@
 * Licensed under the Simplified BSD License [see license.txt]
 **************************************************************************/
 #pragma once
+#include <stdbool.h>
 
 typedef unsigned int uint;
 typedef unsigned long siz;
@@ -16,7 +17,7 @@ typedef struct {
 } RLE;
 
 /* Initialize/destroy RLE. */
-void rleInit(RLE *R, siz h, siz w, siz m, uint *cnts);
+void rleInit(RLE *R, siz h, siz w, siz m, uint *cnts, bool transfer_ownership);
 
 void rleFree(RLE *R);
 
@@ -24,6 +25,9 @@ void rleFree(RLE *R);
 void rlesInit(RLE **R, siz n);
 
 void rlesFree(RLE **R, siz n);
+
+
+void rleShrink(RLE* R);
 
 /* Encode binary masks using RLE. */
 void rleEncode(RLE *R, const byte *mask, siz h, siz w, siz n);
@@ -39,9 +43,11 @@ void rleArea(const RLE *R, siz n, uint *a);
 
 /* Compute the complement of encoded masks. */
 void rleComplement(const RLE *R, RLE *M, siz n);
+void rleComplementInplace(RLE *R, siz n);
 
 /* Crop encoded masks. */
 void rleCrop(const RLE *R, RLE *M, siz n, const uint *bbox);
+void rleCropInplace(RLE *R, siz n, const uint *bbox);
 
 /* Pad encoded masks. */
 void rlePad(const RLE *R, RLE *M, siz n, const uint *pad_amounts);
@@ -76,16 +82,19 @@ void rleFrString(RLE *R, char *s, siz h, siz w);
 /* Remove zero runlengths from RLE encoding, and sum up the neighbors accordingly. */
 void rleEliminateZeroRuns(RLE *R, siz n);
 
-/* Compute connected components of encoded masks */
-void rleConnectedComponents(const RLE *R_in, int connectivity, RLE **components, siz *n);
+/* Compute connected components of an encoded mask */
+void rleConnectedComponents(const RLE *R_in, int connectivity, siz min_size, RLE **components, siz *n_components_out);
 
 /* Split runs that may belong to different connected components */
 RLE *rleSplitRunsThatMayBelongToDifferentComponents(const RLE *R, int connectivity);
 
+/* Compute the centroids of the encoded masks */
+void rleCentroid(const RLE *R, double *xys, siz n);
+
 // Union-find data structure for connected components
-struct UnionFind {
-    struct UnionFind *parent;
-    uint rank;
+struct UnionFindNode {
+    struct UnionFindNode *parent;
+    siz size;
 };
-struct UnionFind *uf_find(struct UnionFind *x);
-void uf_union(struct UnionFind *x, struct UnionFind *y);
+struct UnionFindNode *uf_find(struct UnionFindNode *x);
+void uf_union(struct UnionFindNode *x, struct UnionFindNode *y);

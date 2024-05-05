@@ -36,7 +36,9 @@ It offers the following additional features:
 
 ### Measurements
 - `area = rlemasklib.area(rle_mask)`: Compute the area of an RLE mask
+- `centroid = rlemasklib.centroid(rle_mask)`: Compute the centroid of an RLE mask (or multiple masks). Returns [x, y] coordinates. The centroid is the average position of the foreground pixels. 
 - `iou = rlemasklib.iou(rle_masks)`: Compute the intersection-over-union of multiple (typically two) RLE masks.
+
 
 ### Crop / pad / shift by offset
 - `rle_mask = rlemasklib.crop(rle_mask, bbox)`: Crop an RLE mask to a given bounding box, yielding a mask with smaller height and/or width.
@@ -44,7 +46,10 @@ It offers the following additional features:
 - `rle_mask = rlemasklib.shift(rle_mask, offset, border_value=0)`: Shift an RLE mask by a given pixel offset [dx, dy], filling the border with a given value.
 
 ### Connected components
-- `rle_masks = rlemasklib.connected_components(rle_mask, connectivity=4)`: Extract the connected components of the foreground from an RLE mask. Connectivity can be 4 or 8.
+- `rle_masks = rlemasklib.connected_components(rle_mask, connectivity=4, min_size=1)`: Extract the connected components of the foreground from an RLE mask. Connectivity can be 4 or 8. Minimum size can be set to filter out small components.
+- `rle_mask = rlemasklib.largest_connected_component(rle_mask, connectivity=4)`: Returns the largest connected component of the foreground from an RLE mask. Returns None if there is no foreground.
+- `rle_mask = rlemasklib.remove_small_components(rle_mask, min_size)`: Remove small connected components from the foreground of an RLE mask.
+- `rle_mask = rlemasklib.fill_small_holes(rle_mask, min_size)`: Fill small holes (connected components of the background) in an RLE mask.
 
 ### Conversions (bounding box, polygon)
 - `[x_start, y_start, width, height] = rlemasklib.to_bbox(rle_mask)`: Convert an RLE mask to a bounding box.

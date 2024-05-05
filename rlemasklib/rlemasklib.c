@@ -18,26 +18,41 @@ uint umax(uint a, uint b) {
     return (a > b) ? a : b;
 }
 
-void rleInit(RLE *R, siz h, siz w, siz m, uint *cnts) {
+siz smin(siz a, siz b) {
+    return (a < b) ? a : b;
+}
+
+siz smax(siz a, siz b) {
+    return (a > b) ? a : b;
+}
+
+void rleInit(RLE *R, siz h, siz w, siz m, uint *cnts, bool transfer_ownership) {
     R->h = h;
     R->w = w;
     R->m = m;
-    R->cnts = (m == 0) ? 0 : malloc(sizeof(uint) * m);
-    if (cnts) {
-        memcpy(R->cnts, cnts, sizeof(uint) * m);
+
+    if (m == 0) {
+        R->cnts = NULL;
+        if (transfer_ownership) {
+            free(cnts);
+        }
+    } else if (transfer_ownership) {
+        R->cnts = realloc(cnts, sizeof(uint) * m);
+    } else {
+        R->cnts = malloc(sizeof(uint) * m);
+        if (cnts) {
+            memcpy(R->cnts, cnts, sizeof(uint) * m);
+        }
     }
 }
 
 void rleFree(RLE *R) {
     free(R->cnts);
-    R->cnts = 0;
+    R->cnts = NULL;
 }
 
 void rlesInit(RLE **R, siz n) {
-    *R = (RLE *) malloc(sizeof(RLE) * n);
-    for (siz i = 0; i < n; i++) {
-        rleInit((*R) + i, 0, 0, 0, 0);
-    }
+    *R = calloc(n, sizeof(RLE));
 }
 
 void rlesFree(RLE **R, siz n) {
@@ -45,134 +60,194 @@ void rlesFree(RLE **R, siz n) {
         rleFree((*R) + i);
     }
     free(*R);
-    *R = 0;
+    *R = NULL;
 }
 
 void rleEncode(RLE *R, const byte *M, siz h, siz w, siz n) {
     siz a = w * h;
-    uint *cnts = malloc(sizeof(uint) * (a + 1));
+
     for (siz i = 0; i < n; i++) {
         const byte *T = M + a * i;
         siz k = 0;
-        byte p = 0;
+        byte current;
+        byte prev = 0;
+
+        // count the runs
+        for (siz j = 0; j < a; j++) {
+            current = T[j];
+            if (current != prev) {
+                k++;
+                prev = current;
+            }
+        }
+        rleInit(R + i, h, w, k + 1, NULL, false);
+        uint *cnts = R[i].cnts;
+
+        k = 0;
+        prev = 0;
         uint c = 0;
         for (siz j = 0; j < a; j++) {
-            if (T[j] != p) {
+            current = T[j];
+            if (current != prev) {
                 cnts[k++] = c;
                 c = 0;
-                p = T[j];
+                prev = current;
             }
             c++;
         }
-        cnts[k++] = c;
-        rleInit(R + i, h, w, k, cnts);
+        cnts[k] = c;
     }
-    free(cnts);
 }
 
 void rleDecode(const RLE *R, byte *M, siz n) {
-    siz i, j, k;
-    for (i = 0; i < n; i++) {
+    for (siz i = 0; i < n; i++) {
         byte v = 0;
-        for (j = 0; j < R[i].m; j++) {
-            for (k = 0; k < R[i].cnts[j]; k++) {
-                *(M++) = v;
-            }
+        for (siz j = 0; j < R[i].m; j++) {
+            uint cnt = R[i].cnts[j];
+            memset(M, v, cnt);
+            M += cnt;
             v = !v;
         }
     }
 }
 
 void rleMerge(const RLE *R, RLE *M, siz n, int intersect) {
-    uint *cnts, c, ca, cb, cc, ct;
-    int v, va, vb, vp;
-    siz i, a, b, h = R[0].h, w = R[0].w, m = R[0].m;
-    RLE A, B;
+    uint c, ca, cb, cc, ct;
+    int v, va, vb, v_prev;
+    siz h = R[0].h, w = R[0].w;
+
     if (n == 0) {
-        rleInit(M, 0, 0, 0, 0);
+        rleInit(M, 0, 0, 0, NULL, false);
         return;
     }
     if (n == 1) {
-        rleInit(M, h, w, m, R[0].cnts);
+        rleInit(M, h, w, R[0].m, R[0].cnts, false);
         return;
     }
-    cnts = malloc(sizeof(uint) * (h * w + 1));
-    for (a = 0; a < m; a++) {
-        cnts[a] = R[0].cnts[a];
+    // maximum number of runs is min(h*w+1, sum(m)) (e.g., odd-height checkerboard starting with 1)
+    siz m_total = 0;
+    for (siz i = 0; i < n; i++) {
+        m_total += R[i].m;
     }
-    for (i = 1; i < n; i++) {
-        B = R[i];
-        if (B.h != h || B.w != w) {
+    uint *cnts = malloc(sizeof(uint) * smin(h * w + 1, m_total)); // cnts is the output
+
+    RLE *A = NULL;
+    siz m;
+
+    for (siz i = 1; i < n; i++) {
+        const RLE* B = &R[i];
+        if (B->h != h || B->w != w) {
             h = w = m = 0;
             break;
         }
-        rleInit(&A, h, w, m, cnts);
-        ca = A.cnts[0];
-        cb = B.cnts[0];
+
+        uint *A_cnts;
+        siz A_m;
+
+        if (i == 1) {
+            A_m = R[0].m;
+            A_cnts = R[0].cnts;
+        } else {
+            if (!A) {
+                A = malloc(sizeof(RLE));
+            }
+            rleInit(A, h, w, m, cnts, false); // A is the merged RLE so far
+            A_m = m;
+            A_cnts = A->cnts;
+        }
+
+        ca = A_cnts[0];
+        cb = B->cnts[0];
         v = va = vb = 0;
         m = 0;
-        a = b = 1;
+        siz a = 1;
+        siz b = 1;
         cc = 0;
-        ct = 1;
-        while (ct > 0) {
+        do {
             c = umin(ca, cb);
-            cc += c;
-            ct = 0;
+            cc += c; // add the current consumed amount to the output run
+
+            // consume from the current run of A
             ca -= c;
-            if (!ca && a < A.m) {
-                ca = A.cnts[a++];
-                va = !va;
+            if (!ca && a < A_m) { // consumed a whole run from A and there are more
+                ca = A_cnts[a++]; // get next run from A
+                va = !va; // toggle the value of A
             }
-            ct += ca;
+            ct = ca; // ct is used to check if there are more runs to consume in either A or B
+
+            // consume from the current run of B
             cb -= c;
-            if (!cb && b < B.m) {
-                cb = B.cnts[b++];
+            if (!cb && b < B->m) {
+                cb = B->cnts[b++];
                 vb = !vb;
             }
             ct += cb;
-            vp = v;
+
+            v_prev = v;
             if (intersect) {
                 v = va && vb;
             } else {
                 v = va || vb;
             }
-            if (v != vp || ct == 0) {
+            if (v != v_prev || ct == 0) {
+                // if the value changed or we consumed all runs, we need to save the current run to the output
                 cnts[m++] = cc;
                 cc = 0;
             }
+        } while (ct > 0); // continue until we consumed all runs from both A and B
+
+        if (i>1) {
+            rleFree(A); // free the memory of previous intermediate result
         }
-        rleFree(&A);
     }
-    rleInit(M, h, w, m, cnts);
-    free(cnts);
+    rleInit(M, h, w, m, cnts, true);
+    free(A);
 }
 
 void rleArea(const RLE *R, siz n, uint *a) {
-    siz i, j;
-    for (i = 0; i < n; i++) {
+    for (siz i = 0; i < n; i++) {
         a[i] = 0;
-        for (j = 1; j < R[i].m; j += 2) {
+        for (siz j = 1; j < R[i].m; j += 2) {
             a[i] += R[i].cnts[j];
         }
     }
 }
 
 void rleComplement(const RLE *R, RLE *M, siz n) {
-    siz i, h, w;
-    uint *cnts;
-    for (i = 0; i < n; i++) {
-        h = R[i].h;
-        w = R[i].w;
-        if (R[i].m > 0 && R[i].cnts[0] == 0) {
-            rleInit(M + i, h, w, R[i].m - 1, R[i].cnts + 1);
+    for (siz i = 0; i < n; i++) {
+        siz h = R[i].h;
+        siz w = R[i].w;
+        if (R[i].m == 0 || h == 0 || w == 0) {
+            rleInit(&M[i], h, w, 0, NULL, false);
+        } else if (R[i].m > 0 && R[i].cnts[0] == 0) {
+            // if the first run has size 0, we can just remove it
+            rleInit(&M[i], h, w, R[i].m - 1, R[i].cnts + 1, false);
         } else {
-            cnts = malloc(sizeof(uint) * (R[i].m + 1));
-            cnts[0] = 0;
-            memcpy(cnts + 1, R[i].cnts, sizeof(uint) * R[i].m);
-            (M + i)->cnts = cnts;
-            (M + i)->h = h;
-            (M + i)->w = w;
-            (M + i)->m = R[i].m + 1;
+            // if the first run has size > 0, we need to add a new run of 0s at the beginning
+            rleInit(&M[i], h, w, R[i].m + 1, NULL, false);
+            M[i].cnts[0] = 0;
+            memcpy(M[i].cnts + 1, R[i].cnts, sizeof(uint) * R[i].m);
+        }
+    }
+}
+
+void rleComplementInplace(RLE *R, siz n) {
+    for (siz i = 0; i < n; i++) {
+        siz h = R[i].h;
+        siz w = R[i].w;
+        if (R[i].m == 0 || h == 0 || w == 0) {
+            continue;
+        } else if (R[i].m > 0 && R[i].cnts[0] == 0) {
+            // if the first run has size 0, we can just remove it
+            R[i].m -= 1;
+            memmove(R[i].cnts, R[i].cnts + 1, sizeof(uint) * R[i].m);
+            rleShrink(&R[i]);
+        } else {
+            // if the first run has size > 0, we need to add a new run of 0s at the beginning
+            R[i].m += 1;
+            R[i].cnts = realloc(R[i].cnts, sizeof(uint) * R[i].m);
+            memmove(R[i].cnts + 1, R[i].cnts, sizeof(uint) * (R[i].m - 1));
+            R[i].cnts[0] = 0;
         }
     }
 }
@@ -192,10 +267,10 @@ void rleCrop(const RLE *R, RLE *M, siz n, const uint *bbox) {
 
         if (m == 0 || box_w == 0 || box_h == 0) {
             // RLE is empty, so just fill in zeros.
-            rleInit(M + i, box_h, box_w, 0, NULL);
+            rleInit(M + i, box_h, box_w, 0, NULL, false);
             continue;
         }
-        rleInit(M + i, box_h, box_w, R[i].m, R[i].cnts);
+        rleInit(M + i, box_h, box_w, R[i].m, R[i].cnts, false);
 
         uint *cnts = M[i].cnts;
         uint ignore_until = box_x_start * h + box_y_start;
@@ -248,10 +323,81 @@ void rleCrop(const RLE *R, RLE *M, siz n, const uint *bbox) {
 }
 
 
+void rleCropInplace(RLE *R, siz n, const uint *bbox) {
+    /* Crop RLEs to a specified bounding box in place.*/
+    for (siz i = 0; i < n; i++) {
+        uint h = R[i].h;
+        uint w = R[i].w;
+        siz m = R[i].m;
+
+        // Clip bbox to image boundary.
+        uint box_x_start = umin(bbox[i * 4 + 0], w);
+        uint box_y_start = umin(bbox[i * 4 + 1], h);
+        uint box_w = umin(bbox[i * 4 + 2], w - box_x_start);
+        uint box_h = umin(bbox[i * 4 + 3], h - box_y_start);
+
+        R[i].h = box_h;
+        R[i].w = box_w;
+        if (m == 0 || box_w == 0 || box_h == 0) {
+            rleFree(&R[i]);
+            R[i].m = 0;
+            continue;
+        }
+
+        uint *cnts = R[i].cnts;
+        uint ignore_until = box_x_start * h + box_y_start;
+        uint final_use_until = (box_x_start + box_w - 1) * h + box_h + box_y_start;
+        uint use_until = umin(ignore_until + box_h, final_use_until);
+
+        uint pos = 0;
+        uint used_run_part = 0;
+        bool ignoring = true;
+
+        for (siz j = 0; j < m;) {
+            uint next_mode_switch = (ignoring ? ignore_until : use_until);
+            uint unused_run_part = cnts[j] - used_run_part;
+            uint step = umin(unused_run_part, next_mode_switch - pos);
+            pos += step;
+
+            if (ignoring) {
+                // Consumed an ignored section, remove it.
+                cnts[j] -= step;
+            } else {
+                // Consumed a used section, tally it.
+                used_run_part += step;
+            }
+
+            if (step == unused_run_part) {
+                // Reached the end of the current run, move to the next.
+                j++;
+                used_run_part = 0; // Reinitialize the used run part for the next run.
+            }
+
+            if (pos == next_mode_switch) {
+                // Reached a bounding box boundary, switch modes.
+                if (ignoring) {
+                    ignore_until += h; // The next section will be one column away.
+                } else {
+                    // The next section will be one column away or at the end of the box.
+                    use_until = umin(use_until + h, final_use_until);
+                    if (pos == final_use_until) {
+                        // Reached the end of the bounding box, ignore until end of mask.
+                        ignore_until = w * h;
+                    }
+                }
+                // Toggle to the other mode.
+                ignoring = !ignoring;
+            }
+        }
+    }
+    // Remove non-initial empty runs, in order to make the RLE encoding valid.
+    rleEliminateZeroRuns(R, n);
+}
+
+
 
 void rlePad(const RLE *R, RLE *M, siz n, const uint *pad_amounts) {
     // pad_amounts is four values: left, right, top, bottom
-    /* Crop RLEs to a specified bounding box.*/
     for (siz i = 0; i < n; i++) {
         uint h = R[i].h;
         uint w = R[i].w;
@@ -262,13 +408,13 @@ void rlePad(const RLE *R, RLE *M, siz n, const uint *pad_amounts) {
 
         if (w_out == 0 || h_out == 0) {
             // RLE is empty, so just fill in zeros.
-            rleInit(M + i, h_out, w_out, 0, NULL);
+            rleInit(&M[i], h_out, w_out, 0, NULL, false);
             continue;
         }
 
         if (m == 0 || w == 0 || h == 0) {
             // RLE is empty, so just fill in zeros.
-            rleInit(M + i, h_out, w_out, 1, NULL);
+            rleInit(&M[i], h_out, w_out, 1, NULL, false);
             M[i].cnts[0] = h_out * w_out;
             continue;
         }
@@ -281,12 +427,12 @@ void rlePad(const RLE *R, RLE *M, siz n, const uint *pad_amounts) {
             if (m % 2 == 0 && end_px_addition > 0) {
                 // if num of runs is even, it ends with a run of 1s. If we add padding at the end
                 // we need to add a new run.
-                rleInit(M + i, h_out, w_out, m + 1, NULL);
+                rleInit(&M[i], h_out, w_out, m + 1, NULL, false);
                 memcpy(M[i].cnts, R[i].cnts, sizeof(uint) * m);
                 M[i].cnts[0] += start_px_addition;
                 M[i].cnts[m] = end_px_addition;
             } else {
-                rleInit(M + i, h_out, w_out, m, R[i].cnts);
+                rleInit(&M[i], h_out, w_out, m, R[i].cnts, false);
                 M[i].cnts[0] += + start_px_addition;
                 M[i].cnts[m - 1] += end_px_addition;
             }
@@ -313,7 +459,7 @@ void rlePad(const RLE *R, RLE *M, siz n, const uint *pad_amounts) {
             ++m_out;
         }
 
-        rleInit(M + i, h_out, w_out, m_out, NULL);
+        rleInit(&M[i], h_out, w_out, m_out, NULL, false);
         uint *cnts = M[i].cnts;
         y = 0;
         siz j_out = 0;
@@ -362,7 +508,7 @@ void rlePad(const RLE *R, RLE *M, siz n, const uint *pad_amounts) {
 }
 
 
-void rleConnectedComponents(const RLE *R_in, int connectivity, RLE **components, siz *n_components_out) {
+void rleConnectedComponents(const RLE *R_in, int connectivity, siz min_size, RLE **components, siz *n_components_out) {
     bool diagonal = (connectivity == 8);
     if (R_in->m <= 1) {
         *n_components_out = 0;
@@ -377,8 +523,12 @@ void rleConnectedComponents(const RLE *R_in, int connectivity, RLE **components,
     siz w = R->w;
     uint *cnts = R->cnts;
 
-    struct UnionFind *uf = calloc(m / 2, sizeof(struct UnionFind));
-    // Forward scanning for label updates
+    // initially each run of 1s is a separate component
+    struct UnionFindNode *uf = calloc(m / 2, sizeof(struct UnionFindNode));
+    for (siz i = 1; i < m; i+=2) {
+        uf[i / 2].size = cnts[i];  // initialize the size of the component to the size of the run of 1s
+    }
+
     siz i1 = 1, i2 = 1, r1 = cnts[0], r2 = cnts[0];
     while (i1 < m && i2 < m) {
         // If the runs overlap vertically and are in neighboring columns, we need to update the labels
@@ -408,9 +558,9 @@ void rleConnectedComponents(const RLE *R_in, int connectivity, RLE **components,
     // because some runs of 1s may be connected. Hence, we first count the number of unique labels that remained
     // after the forward and backward passes.
     // This will be the rle.m of the new components
-    uint *new_label_to_component_m = malloc(sizeof(uint) * m / 2);
+    uint *new_label_to_component_m = malloc(sizeof(uint) * (m / 2));
     // This is the mapping from the old label index to the new compacted label index
-    uint *label_to_new_label = malloc(sizeof(uint) * m / 2);
+    uint *label_to_new_label = malloc(sizeof(uint) * (m / 2));
     // fill with m to indicate that the label has not been used yet
     for (siz i = 0; i < m / 2; i++) {
         label_to_new_label[i] = m; // m indicates that the label has not been used yet
@@ -418,15 +568,20 @@ void rleConnectedComponents(const RLE *R_in, int connectivity, RLE **components,
 
     // This is the number of labels we have found so far
     siz n_components = 0;
-    uint *new_labels = malloc(sizeof(uint) * m / 2);
+    uint *new_labels = malloc(sizeof(uint) * (m / 2));
+
     for (siz i = 1; i < m; i += 2) {
-        uint label = (uint) (uf_find(&uf[i / 2]) - uf);
+        struct UnionFindNode* root = uf_find(&uf[i / 2]);
+        if (root->size < min_size) {
+            new_labels[i / 2] = m; // this run is too small to be kept
+            continue;
+        }
+        uint label = (uint) (root - uf);
         uint new_label;
         if (label_to_new_label[label] == m) {
-            label_to_new_label[label] = n_components;
-            new_label_to_component_m[n_components] = 1;
-            new_label = n_components;
-            ++n_components;
+            new_label = n_components++;
+            label_to_new_label[label] = new_label;
+            new_label_to_component_m[new_label] = 1;
         } else {
             new_label = label_to_new_label[label];
         }
@@ -438,19 +593,23 @@ void rleConnectedComponents(const RLE *R_in, int connectivity, RLE **components,
         }
     }
     *n_components_out = n_components;
+    if (n_components == 0) {
+        *components = NULL;
+        return;
+    }
 
     // Now that we know how many runs each component will have, we can initialize the components
     rlesInit(components, n_components);
-    RLE* rles_out = *components;
+    RLE *rles_out = *components;
     for (siz i = 0; i < n_components; i++) {
-        rleInit(&rles_out[i], h, w, new_label_to_component_m[i], NULL);
+        rleInit(&rles_out[i], h, w, new_label_to_component_m[i], NULL, false);
         rles_out[i].cnts[0] = cnts[0]; // the first run of zeroes will be part of all components
     }
 
     // Now we can fill in the components. The next pointer will point to the next run of each component.
-    uint **next_pointer = malloc(sizeof(uint *) * n_components);
+    uint **new_label_to_cnts = malloc(sizeof(uint *) * n_components);
     for (siz i = 0; i < n_components; i++) {
-        next_pointer[i] = rles_out[i].cnts + 1;
+        new_label_to_cnts[i] = rles_out[i].cnts + 1;
     }
 
     // Now we scan over the original RLE runs and depending on its label, we update the components.
@@ -462,31 +621,45 @@ void rleConnectedComponents(const RLE *R_in, int connectivity, RLE **components,
         uint next_count_0s = (i + 1 < R->m) ? cnts[i + 1] : 0;
         uint new_label = new_labels[i / 2];
 
-        if (next_pointer[new_label] > 1 + rles_out[new_label].cnts && *(next_pointer[new_label] - 1) == 0) {
-            // The new run belongs to the same label as the previous and the run of 0s inbetween has size 0,
+        if (new_label == m) {
+            // This run is too small to be kept
+        } else if (
+                new_label_to_cnts[new_label] - rles_out[new_label].cnts > 1  &&
+                new_label_to_cnts[new_label][-1] == 0) {
+            // The new run belongs to the same label as the previous and the run of 0s in between has size 0,
             // so we just extend the previous run of 1s and 0s.
-            *(next_pointer[new_label] - 2) += current_count_1s;
-            *(next_pointer[new_label] - 1) += next_count_0s;
+            new_label_to_cnts[new_label][-2] += current_count_1s;
+            new_label_to_cnts[new_label][-1] += next_count_0s;
         } else {
             // We must add a new pair of runs
-            *(next_pointer[new_label]) = current_count_1s;
-            *(next_pointer[new_label] + 1) = next_count_0s;
-            next_pointer[new_label] += 2;
+            new_label_to_cnts[new_label][0] = current_count_1s;
+            new_label_to_cnts[new_label][1] = next_count_0s;
+            new_label_to_cnts[new_label] += 2;
         }
 
         for (siz j = 0; j < n_components; j++) {
             if (j != new_label) {
                 // We extend the last run of 0s of all other components
-                *(next_pointer[j] - 1) += current_count_1s + next_count_0s;
+                new_label_to_cnts[j][-1] += current_count_1s + next_count_0s;
             }
         }
         r += current_count_1s + next_count_0s;
     }
 
+    // Check if the last run is empty, and if so, remove it
+    uint last_label = new_labels[m / 2 - 1];
+    if (last_label != m) {
+        RLE *last_component = &rles_out[last_label];
+        if (last_component->cnts[last_component->m - 1] == 0) {
+            last_component->m -= 1;
+            rleShrink(last_component);
+        }
+    }
+
     // Clean up
     free(new_label_to_component_m);
     free(label_to_new_label);
-    free(next_pointer);
+    free(new_label_to_cnts);
     free(new_labels);
     if (R_split) {
         rleFree(R_split);
@@ -497,13 +670,13 @@ void rleConnectedComponents(const RLE *R_in, int connectivity, RLE **components,
 }
 
 void rleEliminateZeroRuns(RLE *R, siz n) {
-    siz i, j, k;
-    for (i = 0; i < n; ++i) {
+    for (siz i = 0; i < n; ++i) {
         if (R[i].m == 0) {
             // Already empty.
             continue;
         }
-
+        siz k;
+        siz j;
         for (k = 0, j = 1; j < R[i].m; ++j) {
             if (R[i].cnts[j] > 0) {
                 R[i].cnts[++k] = R[i].cnts[j];
@@ -512,7 +685,12 @@ void rleEliminateZeroRuns(RLE *R, siz n) {
             }
         }
         R[i].m = k + 1;
+        rleShrink(&R[i]);
     }
+}
+
+void rleShrink(RLE* R) {
+    R->cnts = realloc(R->cnts, sizeof(uint) * R->m);
 }
 
 RLE *rleSplitRunsThatMayBelongToDifferentComponents(const RLE *R, int connectivity) {
@@ -520,7 +698,7 @@ RLE *rleSplitRunsThatMayBelongToDifferentComponents(const RLE *R, int connectivi
     // and its length is less than the height of the image. If it's exactly the height of the image it does not
     // split if connectivity is 8, but it might if connectivity is 4. If it has larger length, it will never split.
     siz j;
-    int diagonal = connectivity == 8;
+    bool diagonal = (connectivity == 8);
     uint h = R->h;
     uint w = R->w;
     siz m = R->m;
@@ -537,8 +715,8 @@ RLE *rleSplitRunsThatMayBelongToDifferentComponents(const RLE *R, int connectivi
         return NULL;
     }
 
-    RLE *M = malloc(sizeof(RLE));  // This memory will be freed by the caller
-    rleInit(M, h, w, m + 2 * n_splits, NULL);
+    RLE *M = malloc(sizeof(RLE));  // This memory must be freed by the caller
+    rleInit(M, h, w, m + 2 * n_splits, NULL, false);
     r = 0;
     siz i_out = 0;
     for (j = 0; j < m; ++j) {
@@ -722,13 +900,56 @@ void rleToBbox(const RLE *R, BB bb, siz n) {
     }
 }
 
+//void rleFrBbox(RLE *R, const BB bb, siz h, siz w, siz n) {
+//    for (siz i = 0; i < n; i++) {
+//        double xs = bb[4 * i + 0], xe = xs + bb[4 * i + 2];
+//        double ys = bb[4 * i + 1], ye = ys + bb[4 * i + 3];
+//        double xy[8] = {xs, ys, xs, ye, xe, ye, xe, ys};
+//        rleFrPoly(R + i, xy, 4, h, w);
+//    }
+//}
+
 void rleFrBbox(RLE *R, const BB bb, siz h, siz w, siz n) {
-    siz i;
-    for (i = 0; i < n; i++) {
-        double xs = bb[4 * i + 0], xe = xs + bb[4 * i + 2];
-        double ys = bb[4 * i + 1], ye = ys + bb[4 * i + 3];
-        double xy[8] = {xs, ys, xs, ye, xe, ye, xe, ys};
-        rleFrPoly(R + i, xy, 4, h, w);
+    for (siz i=0; i < n; i++) {
+        siz xs = round(bb[4 * i + 0]);
+        siz ys = round(bb[4 * i + 1]);
+        siz xe = round(bb[4 * i + 0] + bb[4 * i + 2]);
+        siz ye = round(bb[4 * i + 1] + bb[4 * i + 3]);
+        xe = xe > w ? w : xe;
+        ye = ye > h ? h : ye;
+        siz bw = xe - xs;
+        siz bh = ye - ys;
+        siz m;
+        if (bw == 0 || bh == 0) {
+            rleInit(R + i, h, w, 1, NULL, false);
+            R[i].cnts[0] = h * w;
+            continue;
+        }
+
+        if (bh == h) {
+            // if the bounding box spans the entire height, it will have a single run of 1s.
+            m = (xe == w ? 2 : 3);
+            rleInit(R + i, h, w, m, NULL, false);
+            R[i].cnts[0] = h * xs; // run of 0s
+            // if it spans the entire width, it will have no final run of 0s.
+            R[i].cnts[1] = h * bw; // run of 1s
+        } else {
+            // runs of 1 are the columns of the box (as many as the width of the box)
+            // and each will have a preceding run of 0s. If the box does not end at the end of the image,
+            // there will be a final run of 0s too.
+            m = bw * 2 + (xe == w && ye == h ? 0 : 1);
+            rleInit(R + i, h, w, m, NULL, false);
+            R[i].cnts[0] = h * xs + ys; // run of 0s
+            R[i].cnts[1] = bh; // run of 1s
+            for (siz j = 1; j < bw; j++) {
+                R[i].cnts[j * 2] = h - bh; // run of 0s
+                R[i].cnts[j * 2 + 1] = bh; // run of 1s
+            }
+        }
+
+        if (xe < w) {
+            R[i].cnts[m - 1] =  h * (w - xe) + (h - ye); // run of 0s
+        }
     }
 }
 
@@ -848,97 +1069,157 @@ void rleFrPoly(RLE *R, const double *xy, siz k, siz h, siz w) {
             }
         }
     }
-    rleInit(R, h, w, m, b);
+    rleInit(R, h, w, m, b, true);
     free(a);
-    free(b);
+}
+
+void rleCentroid(const RLE *R, double *xys, siz n) {
+    for (siz i = 0; i < n; i++) {
+        siz m = R[i].m;
+        uint h = R[i].h;
+        uint pos = 0;
+        uint area = 0;
+        double x = 0, y = 0;
+
+        for (siz j = 0; j < m; j ++) {
+            uint cnt = R[i].cnts[j];
+
+            if (j % 2 == 1) { // run of 1s
+                area += cnt;
+
+                uint start_col = pos / h;
+                uint cnt1 = umin(cnt, h - (pos % h));
+                x += start_col * cnt1;
+                y += ((pos % h) + (cnt1 - 1) *0.5) * cnt1;
+
+                // second part is multiple full columns
+                uint num_full_cols = (cnt - cnt1) / h;
+                uint cnt2 = num_full_cols * h;
+                if (cnt2) {
+                    x += (start_col + 1 + (num_full_cols - 1) *0.5) * cnt2;
+                    y += ((h - 1) * 0.5) * cnt2;
+                }
+
+                // third part is a partial column
+                uint cnt3 = cnt - cnt1 - cnt2;
+                if (cnt3) {
+                    x += (start_col + num_full_cols + 1) * cnt3;
+                    y += ((cnt3 - 1) *0.5) * cnt3;
+                }
+            }
+            pos += cnt;
+        }
+
+        xys[i * 2 + 0] = x / area;
+        xys[i * 2 + 1] = y / area;
+    }
 }
 
 char *rleToString(const RLE *R) {
     /* Similar to LEB128 but using 6 bits/char and ascii chars 48-111. */
-    siz i, m = R->m, p = 0;
-    long x;
-    int more;
-    char *s = malloc(sizeof(char) * m * 6);
-    for (i = 0; i < m; i++) {
-        x = (long) R->cnts[i];
+    siz m = R->m;
+    // optimistic allocation (realistic masks tend to take up less than 2x the space of the rle)
+    // in a single byte we can store 5 bits of the run length (difference), allowing for a range of -16 to 15
+    // in two bytes we can store 10 bits, allowing for a range of -512 to 511
+    // experimentally, in a realistic human mask dataset (mixed sources) the factor for the 99th percentile is
+    // still below 2.0, so we use that as a heuristic. The average is around 1.5.
+    siz alloc_size = 2 * m * sizeof(char);
+    char *s = malloc(alloc_size); // optimistic allocation
+    siz p = 0;
+    bool more;
+    for (siz i = 0; i < m; i++) {
+        long x = R->cnts[i];
         if (i > 2) {
-            x -= (long) R->cnts[i - 2];
+            x -= R->cnts[i - 2];  // take the difference from the last run of the same value
         }
-        more = 1;
-        while (more) {
-            char c = x & 0x1f;
+
+        do {
+            char c = x & 0x1f;  // last 5 bits of the run length difference
             x >>= 5;
+            // if all the remaining bits are the same as the highest bit of the current 5 bits,
+            // then this is the last 5-bit chunk we need
             more = (c & 0x10) ? x != -1 : x != 0;
             if (more) {
-                c |= 0x20;
+                c |= 0x20; // set continuation bit at the 3rd position
             }
-            c += 48;
-            s[p++] = c;
-        }
+
+            if (p >= alloc_size) {
+                alloc_size *= 2;
+                s = realloc(s, alloc_size);
+            }
+            s[p++] = c + 48;  // ascii 48 is '0'. 48-111 is the range of ascii chars we use
+        } while (more);
     }
-    s[p] = 0;
-    return s;
+    s[p++] = 0; // null-terminate the string
+    return realloc(s, sizeof(char) * p);
 }
 
 void rleFrString(RLE *R, char *s, siz h, siz w) {
-    siz m = 0, p = 0, k;
-    long x;
-    int more;
-    uint *cnts;
-    while (s[m]) {
-        m++;
+    siz m = 0;
+    for (siz p=0; s[p]; p++) {
+        if (((s[p] - 48) & 0x20) == 0){  // check the continuation bit
+            m++;
+        }
     }
-    cnts = malloc(sizeof(uint) * m);
+    rleInit(R, h, w, m, NULL, false);
+    uint *cnts = R->cnts;
+
     m = 0;
-    while (s[p]) {
-        x = 0;
-        k = 0;
-        more = 1;
-        while (more) {
-            char c = s[p] - 48;
-            x |= (c & 0x1f) << 5 * k;
-            more = c & 0x20;
-            p++;
-            k++;
-            if (!more && (c & 0x10)) {
-                x |= -1 << 5 * k;
+    for (siz p=0; s[p];) {
+        long x = 0; // the run length (difference)
+        siz k = 0; // the number of bytes (of which 5 bits and a continuation bit are used) in the run length
+        char more;
+        do {
+            char c = s[p];
+            if (!c) {
+                return; // unexpected end of string, last char promised more to come, but lied. Malformed input!
             }
-        }
+
+            c -= 48; // subtract the offset, so the range is 0-63
+            x |= (long)(c & 0x1f) << k; // take the last 5 bits of the char and shift them to the right position
+            more = c & 0x20; // check the continuation bit
+            p++;
+            k += 5;
+            if (!more && (c & 0x10)) {
+                x |= -1 << k; // if the highest bit of the last 5 bits is set, set all the remaining bits to 1
+            }
+        } while (more);
+
         if (m > 2) {
-            x += (long) cnts[m - 2];
+            x += cnts[m - 2]; // add the difference to the last run of the same value
         }
-        cnts[m++] = (uint) x;
+
+        cnts[m++] = x;
     }
-    rleInit(R, h, w, m, cnts);
-    free(cnts);
+    return 0;
 }
 
 // Union-find data structure for tracking connected components
-struct UnionFind *uf_find(struct UnionFind *x) {
-    struct UnionFind *z = x;
+struct UnionFindNode *uf_find(struct UnionFindNode *x) {
+    struct UnionFindNode *z = x;
     while (z->parent) {
         z = z->parent;
     }
     while (x->parent) {
-        struct UnionFind *tmp = x->parent;
+        struct UnionFindNode *tmp = x->parent;
         x->parent = z;
         x = tmp;
     }
     return z;
 }
 
-void uf_union(struct UnionFind *x, struct UnionFind *y) {
+void uf_union(struct UnionFindNode *x, struct UnionFindNode *y) {
     x = uf_find(x);
     y = uf_find(y);
     if (x == y) {
         return;
     }
-    if (x->rank < y->rank) {
+    if (x->size < y->size) {
         x->parent = y;
+        y->size += x->size;
     } else {
         y->parent = x;
-        if (x->rank == y->rank) {
-            x->rank++;
-        }
+        x->size += y->size;
     }
 }
+

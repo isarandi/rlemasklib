@@ -1,6 +1,8 @@
 import zlib
 import numpy as np
 import rlemasklib.rlemasklib_cython as rlemasklib_cython
+
+
 # Interface for manipulating masks stored in RLE format.
 #
 # RLE is a simple yet efficient format for storing binary masks. RLE
@@ -81,13 +83,8 @@ def encode(mask, compressed=True, zlevel=None):
             counts: LEB128-like compressed run-length counts
             zcounts: zlib-compressed LEB128-like compressed run-length counts
     """
-    encoded = _encode(np.asfortranarray(mask.astype(np.uint8)))
-
-    if not compressed:
-        # TODO: we could directly generate uncompressed RLEs as well
-        return decompress(encoded)
-
-    if zlevel is not None:
+    encoded = _encode(np.asfortranarray(mask.astype(np.uint8)), compress_leb128=compressed)
+    if compressed and zlevel is not None:
         return compress(encoded, zlevel=zlevel)
 
     return encoded
@@ -132,6 +129,7 @@ def crop(rleObjs, bbox):
         rleObjs_out = rlemasklib_cython.crop([rleObjs], bbox[np.newaxis])
         return rleObjs_out[0]
 
+
 def _pad(rleObjs, paddings):
     """Pad a mask or multiple masks (RLEs) by the given padding amounts.
 
@@ -149,11 +147,13 @@ def _pad(rleObjs, paddings):
         rleObjs_out = rlemasklib_cython.pad([rleObjs], paddings)
         return rleObjs_out[0]
 
+
 def pad(rleObjs, paddings, value=0):
     if value == 0:
         return _pad(rleObjs, paddings)
     else:
         return complement(_pad(complement(rleObjs), paddings))
+
 
 def to_bbox(rleObjs):
     """Convert an RLE mask or multiple RLE masks to a bounding box or a list of bounding boxes.
@@ -190,7 +190,11 @@ def from_bbox(bbox, imshape=None, imsize=None):
     """
     imshape = get_imshape(imshape, imsize)
     bbox = np.asanyarray(bbox, dtype=np.float64)
-    return rlemasklib_cython.frBbox(bbox[np.newaxis], imshape[0], imshape[1])[0]
+
+    if len(bbox.shape) == 2:
+        return rlemasklib_cython.frBbox(bbox, imshape[0], imshape[1])
+    else:
+        return rlemasklib_cython.frBbox(bbox[np.newaxis], imshape[0], imshape[1])[0]
 
 
 def from_polygon(poly, imshape=None, imsize=None):
@@ -237,7 +241,7 @@ def full(imshape=None, imsize=None):
     return compress({'size': imshape[:2], 'ucounts': [0, imshape[0] * imshape[1]]})
 
 
-def decompress(encoded_mask):
+def decompress(encoded_mask, only_gzip=False):
     """Decompress a compressed RLE mask to a decompressed RLE. Note that this does not decode the RLE into a binary mask.
 
     Args:
@@ -252,6 +256,8 @@ def decompress(encoded_mask):
         encoded_mask = dict(
             size=encoded_mask['size'],
             counts=zlib.decompress(encoded_mask['zcounts']))
+    if only_gzip:
+        return encoded_mask
 
     return _decompress(encoded_mask)
 
@@ -289,12 +295,14 @@ def intersection(masks):
 
 def difference(mask1, mask2):
     """Compute the difference between two RLE masks, i.e., the mask where mask1 is foreground and mask2 is background."""
-    return intersection([mask1, complement(mask2)])
+    # intersection([mask1, complement(mask2)])
+    return rlemasklib_cython.difference(mask1, mask2)
 
 
 def symmetric_difference(mask1, mask2):
     """Compute the symmetric difference between two RLE masks, i.e., the mask where either mask1 or mask2 is foreground but not both."""
-    return difference(union([mask1, mask2]), intersection([mask1, mask2]))
+    # difference(union([mask1, mask2]), intersection([mask1, mask2]))
+    return rlemasklib_cython.symmetricDifference(mask1, mask2)
 
 
 def _compress(uncompressed_rle):
@@ -309,12 +317,12 @@ def _decompress(compressed_rle):
     return rlemasklib_cython.decompress([compressed_rle])[0]
 
 
-def _encode(bimask):
+def _encode(bimask, compress_leb128=True):
     if len(bimask.shape) == 3:
-        return rlemasklib_cython.encode(bimask)
+        return rlemasklib_cython.encode(bimask, compress_leb128)
     elif len(bimask.shape) == 2:
         h, w = bimask.shape
-        return rlemasklib_cython.encode(bimask.reshape((h, w, 1), order='F'))[0]
+        return rlemasklib_cython.encode(bimask.reshape((h, w, 1), order='F'), compress_leb128)[0]
 
 
 def _decode(rleObjs):
@@ -332,47 +340,90 @@ def _decode_uncompressed(rleObjs):
 
 
 def iou(masks):
-    union_ = area(union(masks))
-    if union_ == 0:
-        return 0
-    intersection_ = area(intersection(masks))
-    return intersection_ / union_
+    return rlemasklib_cython.iouMulti(masks)
+    #intersection_ = area(intersection(masks))
+    #if intersection_ == 0:
+    #    return 0
+    #union_ = area(union(masks))
+    #return intersection_ / union_
 
 
-def connected_components(rle, connectivity=4):
-    return rlemasklib_cython.connectedComponents(rle, connectivity)
+def connected_components(rle, connectivity=4, min_size=1):
+    return rlemasklib_cython.connectedComponents(rle, connectivity, min_size)
+
+
 def shift(rle, offset, border_value=0):
-    if offset == (0,0):
+    if offset == (0, 0):
         return rle
     h, w = rle['size']
     paddings = np.maximum(0, np.array([offset[0], -offset[0], offset[1], -offset[1]]))
-    cropbox = np.maximum(0,  np.array([-offset[0], -offset[1], w, h]))
+    cropbox = np.maximum(0, np.array([-offset[0], -offset[1], w, h]))
     return crop(pad(rle, paddings, border_value), cropbox)
+
 
 def erode(rle, connectivity=4):
     return complement(dilate(complement(rle), connectivity))
 
+
 def dilate(rle, connectivity=4):
     if connectivity == 4:
-        neighbor_offsets = [(0,1), (0,-1), (1,0), (-1,0)]
+        neighbor_offsets = [(0, 1), (0, -1), (1, 0), (-1, 0)]
     else:
-        neighbor_offsets = [(0,1), (0,-1), (1,0), (-1,0), (1,1), (-1,-1), (1,-1), (-1,1)]
+        neighbor_offsets = [(0, 1), (0, -1), (1, 0), (-1, 0), (1, 1), (-1, -1), (1, -1), (-1, 1)]
     return union([rle] + [shift(rle, offset) for offset in neighbor_offsets])
+
 
 def opening(rle, connectivity=4):
     return dilate(erode(rle, connectivity), connectivity)
 
+
 def closing(rle, connectivity=4):
     return erode(dilate(rle, connectivity), connectivity)
+
 
 def erode2(rle):
     return complement(dilate2(complement(rle)))
 
+
 def dilate2(rle):
     return dilate(dilate(rle, 4), 8)
+
 
 def opening2(rle):
     return dilate2(erode2(rle))
 
+
 def closing2(rle):
     return erode2(dilate2(rle))
+
+
+def remove_small_components(rle, connectivity=4, min_size=1):
+    components = connected_components(rle, connectivity, min_size)
+    return union(components)
+
+
+def fill_small_holes(rle, connectivity=4, min_size=1):
+    return complement(remove_small_components(complement(rle), connectivity, min_size))
+
+
+def largest_connected_component(rle, connectivity=4):
+    components = connected_components(rle, connectivity)
+    if not components:
+        return None
+    areas = area(components)
+    return components[np.argmax(areas)]
+
+
+def centroid(rleObjs):
+    """Compute the foreground centroid for a mask or multiple masks.
+
+    Args:
+        rleObjs: either a single RLE or a list of RLEs
+
+    Returns:
+        A scalar if input was a single RLE, otherwise a list of scalars.
+    """
+    if isinstance(rleObjs, (tuple, list)):
+        return rlemasklib_cython.centroid(rleObjs).astype(np.float32)
+    else:
+        return rlemasklib_cython.centroid([rleObjs])[0].astype(np.float32)
