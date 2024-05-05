@@ -48,8 +48,8 @@ It offers the following additional features:
 ### Connected components
 - `rle_masks = rlemasklib.connected_components(rle_mask, connectivity=4, min_size=1)`: Extract the connected components of the foreground from an RLE mask. Connectivity can be 4 or 8. Minimum size can be set to filter out small components.
 - `rle_mask = rlemasklib.largest_connected_component(rle_mask, connectivity=4)`: Returns the largest connected component of the foreground from an RLE mask. Returns None if there is no foreground.
-- `rle_mask = rlemasklib.remove_small_components(rle_mask, min_size)`: Remove small connected components from the foreground of an RLE mask.
-- `rle_mask = rlemasklib.fill_small_holes(rle_mask, min_size)`: Fill small holes (connected components of the background) in an RLE mask.
+- `rle_mask = rlemasklib.remove_small_components(rle_mask, connectivity, min_size)`: Remove small connected components from the foreground of an RLE mask.
+- `rle_mask = rlemasklib.fill_small_holes(rle_mask, connectivity, min_size)`: Fill small holes (connected components of the background) in an RLE mask.
 
 ### Conversions (bounding box, polygon)
 - `[x_start, y_start, width, height] = rlemasklib.to_bbox(rle_mask)`: Convert an RLE mask to a bounding box.
