@@ -1191,7 +1191,6 @@ void rleFrString(RLE *R, char *s, siz h, siz w) {
 
         cnts[m++] = x;
     }
-    return 0;
 }
 
 // Union-find data structure for tracking connected components
