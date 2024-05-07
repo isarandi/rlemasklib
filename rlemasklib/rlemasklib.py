@@ -36,18 +36,21 @@ import rlemasklib.rlemasklib_cython as rlemasklib_cython
 
 from enum import Enum
 
+_X = 0b1100
+_Y = 0b1010
+
 
 class BoolFunc(Enum):
-    A = 12
-    B = 10
-    UNION = OR = 14
-    INTERSECTION = AND = 8
-    DIFFERENCE = 4
-    SYMMETRIC_DIFFERENCE = XOR = 6
-    EQUIVALENCE = XNOR = 9
-    IMPLICATION = 11
-    NOR = 1
-    NAND = 7
+    A = _X
+    B = _Y
+    UNION = OR = _X | _Y
+    INTERSECTION = AND = _X & _Y
+    DIFFERENCE = _X & ~_Y
+    SYMMETRIC_DIFFERENCE = XOR = _X ^ _Y
+    EQUIVALENCE = XNOR = ~(_X ^ _Y)
+    IMPLICATION = ~_X | _Y
+    NOR = ~(_X | _Y)
+    NAND = ~(_X & _Y)
 
 
 class RLE:
@@ -388,7 +391,7 @@ def difference(mask1, mask2):
 
 
 def any(mask):
-    return len(mask['counts']) <= 1
+    return len(mask['counts']) > 1
 
 
 def all(mask):
