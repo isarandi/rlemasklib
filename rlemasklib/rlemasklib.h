@@ -26,7 +26,7 @@ void rlesInit(RLE **R, siz n);
 
 void rlesFree(RLE **R, siz n);
 
-
+/* Shrink RLE by reallocating cnts to the actual size. */
 void rleShrink(RLE* R);
 
 /* Encode binary masks using RLE. */
@@ -36,7 +36,7 @@ void rleEncode(RLE *R, const byte *mask, siz h, siz w, siz n);
 void rleDecode(const RLE *R, byte *mask, siz n);
 
 /* Compute union or intersection of encoded masks. */
-void rleMerge(const RLE *R, RLE *M, siz n, int intersect);
+void rleMerge(const RLE *R, RLE *M, siz n, uint boolfunc);
 
 /* Compute area of encoded masks. */
 void rleArea(const RLE *R, siz n, uint *a);

@@ -2,7 +2,6 @@ import zlib
 import numpy as np
 import rlemasklib.rlemasklib_cython as rlemasklib_cython
 
-
 # Interface for manipulating masks stored in RLE format.
 #
 # RLE is a simple yet efficient format for storing binary masks. RLE
@@ -34,6 +33,87 @@ import rlemasklib.rlemasklib_cython as rlemasklib_cython
 # Code written by Piotr Dollar and Tsung-Yi Lin, 2015.
 # Modified by Istvan Sarandi, 2023.
 # Licensed under the Simplified BSD License [see coco/license.txt]
+
+from enum import Enum
+
+
+class BoolFunc(Enum):
+    A = 12
+    B = 10
+    UNION = OR = 14
+    INTERSECTION = AND = 8
+    DIFFERENCE = 4
+    SYMMETRIC_DIFFERENCE = XOR = 6
+    EQUIVALENCE = XNOR = 9
+    IMPLICATION = 11
+    NOR = 1
+    NAND = 7
+
+
+class RLE:
+    def __init__(self, d):
+        self.d = d
+
+    def __getitem__(self, key):
+        # Cropping via indexing like rle[1:2, 3:4]
+        if isinstance(key, tuple) and len(key) == 2:
+            # both indices must be a slice
+            if isinstance(key[0], slice) and isinstance(key[1], slice):
+                # substitute negative indices and None:
+                h, w = self.d['size']
+                start_h, stop_h, step_h = key[0].indices(h)
+                start_w, stop_w, step_w = key[1].indices(w)
+                # step must be 1
+                if step_h != 1 or step_w != 1:
+                    raise ValueError('Only step=1 is supported')
+                # crop the mask
+                return crop(self.d, [start_w, start_h, stop_w - start_w, stop_h - start_h])
+            else:
+                raise ValueError('Only slicing is supported, not individual indexing')
+        else:
+            raise ValueError('Only 2D slicing is supported')
+
+    def __setitem__(self, key, value):
+        if value not in (0, 1):
+            raise ValueError('Value must be 0 or 1')
+
+        if isinstance(key, tuple) and len(key) == 2:
+            # both indices must be a slice
+            if isinstance(key[0], slice) and isinstance(key[1], slice):
+                # substitute negative indices and None:
+                h, w = self.d['size']
+                start_h, stop_h, step_h = key[0].indices(h)
+                start_w, stop_w, step_w = key[1].indices(w)
+                # step must be 1
+                if step_h != 1 or step_w != 1:
+                    raise ValueError('Only step=1 is supported')
+
+                boxmask = from_bbox([start_w, start_h, stop_w - start_w, stop_h - start_h], [h, w])
+                if value == 0:
+                    self.d = difference(self.d, boxmask)
+                else:
+                    self.d = union([self.d, boxmask])
+            else:
+                raise ValueError('Only slicing is supported, not individual indexing')
+
+    # overload the bitwise operators
+    def __and__(self, other):
+        return RLE(intersection([self.d, other.d]))
+
+    def __or__(self, other):
+        return RLE(union([self.d, other.d]))
+
+    def __xor__(self, other):
+        return RLE(symmetric_difference(self.d, other.d))
+
+    def __sub__(self, other):
+        return RLE(difference(self.d, other.d))
+
+    def __invert__(self):
+        return RLE(complement(self.d))
+
+    def todict(self):
+        return self.d
 
 
 def area(rleObjs):
@@ -213,7 +293,7 @@ def from_polygon(poly, imshape=None, imsize=None):
     return rlemasklib_cython.frPoly(poly[np.newaxis], imshape[0], imshape[1])[0]
 
 
-def empty(imshape=None, imsize=None):
+def zeros(imshape=None, imsize=None):
     """Create an empty (fully background) RLE mask of the given size.
 
     Args:
@@ -227,7 +307,7 @@ def empty(imshape=None, imsize=None):
     return compress({'size': imshape[:2], 'ucounts': [imshape[0] * imshape[1]]})
 
 
-def full(imshape=None, imsize=None):
+def ones(imshape=None, imsize=None):
     """Create a full (fully foreground) RLE mask of the given size.
 
     Args:
@@ -239,6 +319,14 @@ def full(imshape=None, imsize=None):
     """
     imshape = get_imshape(imshape, imsize)
     return compress({'size': imshape[:2], 'ucounts': [0, imshape[0] * imshape[1]]})
+
+
+def ones_like(mask):
+    return ones(mask['size'])
+
+
+def zeros_like(mask):
+    return zeros(mask['size'])
 
 
 def decompress(encoded_mask, only_gzip=False):
@@ -277,32 +365,47 @@ def compress(rle, zlevel=None):
         rle = _compress(rle)
 
     if 'counts' in rle and zlevel is not None:
-        rle['zcounts'] = zlib.compress(rle['counts'], zlevel)
-        del rle['counts']
+        rle = dict(
+            size=rle['size'],
+            zcounts=zlib.compress(rle['counts'], zlevel))
 
     return rle
 
 
 def union(masks):
     """Compute the union of multiple RLE masks."""
-    return rlemasklib_cython.merge(masks, intersect=False)
+    return merge(masks, BoolFunc.UNION)
 
 
 def intersection(masks):
     """Compute the intersection of multiple RLE masks."""
-    return rlemasklib_cython.merge(masks, intersect=True)
+    return merge(masks, BoolFunc.INTERSECTION)
 
 
 def difference(mask1, mask2):
     """Compute the difference between two RLE masks, i.e., the mask where mask1 is foreground and mask2 is background."""
-    # intersection([mask1, complement(mask2)])
-    return rlemasklib_cython.difference(mask1, mask2)
+    return merge([mask1, mask2], BoolFunc.DIFFERENCE)
+
+
+def any(mask):
+    return len(mask['counts']) <= 1
+
+
+def all(mask):
+    h, w = mask['size']
+    if h * w == 0:
+        return True
+
+    return len(mask['counts']) == 2 and mask['counts'][0] == b'\x00'
 
 
 def symmetric_difference(mask1, mask2):
     """Compute the symmetric difference between two RLE masks, i.e., the mask where either mask1 or mask2 is foreground but not both."""
-    # difference(union([mask1, mask2]), intersection([mask1, mask2]))
-    return rlemasklib_cython.symmetricDifference(mask1, mask2)
+    return merge([mask1, mask2], BoolFunc.SYMMETRIC_DIFFERENCE)
+
+
+def merge(masks, boolfunc: BoolFunc):
+    return rlemasklib_cython.merge(masks, boolfunc.value)
 
 
 def _compress(uncompressed_rle):
@@ -341,11 +444,11 @@ def _decode_uncompressed(rleObjs):
 
 def iou(masks):
     return rlemasklib_cython.iouMulti(masks)
-    #intersection_ = area(intersection(masks))
-    #if intersection_ == 0:
+    # intersection_ = area(intersection(masks))
+    # if intersection_ == 0:
     #    return 0
-    #union_ = area(union(masks))
-    #return intersection_ / union_
+    # union_ = area(union(masks))
+    # return intersection_ / union_
 
 
 def connected_components(rle, connectivity=4, min_size=1):

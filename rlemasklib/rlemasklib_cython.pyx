@@ -41,7 +41,7 @@ cdef extern from "rlemasklib.h":
     void rlesInit(RLE ** R, siz n)
     void rleEncode(RLE *R, const byte *M, siz h, siz w, siz n)
     void rleDecode(const RLE *R, byte *mask, siz n)
-    void rleMerge(const RLE *R, RLE *M, siz n, int intersect)
+    void rleMerge(const RLE *R, RLE *M, siz n, uint boolfunc)
     void rleArea(const RLE *R, siz n, uint *a)
     void rleComplement(const RLE *R_in, RLE *R_out, siz n)
     void rleComplementInplace(RLE *R_in, siz n)
@@ -198,10 +198,10 @@ def decodeUncompressed(ucRles):
     rleDecode(<RLE *> Rs._R, masks._mask, n)
     return np.array(masks)
 
-def merge(rleObjs, intersect=0):
+def merge(rleObjs, boolfunc=14):
     cdef RLEs Rs = _from_leb128_dicts(rleObjs)
     cdef RLEs R = RLEs(1)
-    rleMerge(<RLE *> Rs._R, <RLE *> R._R, <siz> Rs._n, intersect)
+    rleMerge(<RLE *> Rs._R, <RLE *> R._R, <siz> Rs._n, boolfunc)
     return _to_leb128_dicts(R)[0]
 
 def area(rleObjs):
@@ -249,17 +249,20 @@ def symmetricDifference(rleObj1, rleObj2):
 
 def iouMulti(rleObjs):
     cdef RLEs Rs = _from_leb128_dicts(rleObjs)
-    cdef RLEs Rs_merged = RLEs(2)  # intersection and union
-    rleMerge(Rs._R, Rs_merged._R, Rs._n, 1)
+    cdef RLEs Rs_merged = RLEs(1)  # intersection and union
 
-    cdef uint * _a = <uint *> malloc(Rs_merged._n * sizeof(uint))
-    rleArea(Rs_merged._R, 1, _a)
-    if _a[0] == 0:
+    cdef uint intersection_area;
+    rleMerge(Rs._R, Rs_merged._R, Rs._n, 1)
+    rleArea(Rs_merged._R, 1, &intersection_area)
+
+    if intersection_area == 0:
         return 0
 
-    rleMerge(Rs._R, Rs_merged._R + 1, Rs._n, 0)
-    rleArea(Rs_merged._R + 1, 1, _a + 1)
-    return _a[0] / _a[1]
+    cdef uint union_area;
+    rleMerge(Rs._R, Rs_merged._R, Rs._n, 0)
+    rleArea(Rs_merged._R, 1, &union_area)
+
+    return intersection_area / union_area
 
 # iou computation. support function overload (RLEs-RLEs and bbox-bbox).
 def iou(dt, gt, pyiscrowd):
