@@ -22,6 +22,9 @@ from cpython.bytes cimport PyBytes_FromStringAndSize
 # intialized Numpy. must do.
 np.import_array()
 
+_INTERSECTION = 8
+_UNION = 14
+
 # import numpy C function
 # we use PyArray_ENABLEFLAGS to make Numpy ndarray responsible to memoery management
 cdef extern from "numpy/arrayobject.h":
@@ -230,36 +233,20 @@ def complement(rleObjs):
     rleComplementInplace(Rs._R, Rs._n)
     return _to_leb128_dicts(Rs)
 
-def difference(rleObj1, rleObj2):
-    cdef RLEs Rs_in = _from_leb128_dicts([rleObj2, rleObj1])
-    rleComplementInplace(Rs_in._R, 1)
-    cdef RLEs Rs_out = RLEs(1)
-    rleMerge(Rs_in._R, Rs_out._R, Rs_in._n, 1)
-    return _to_leb128_dicts(Rs_out)[0]
-
-def symmetricDifference(rleObj1, rleObj2):
-    cdef RLEs Rs_in = _from_leb128_dicts([rleObj1, rleObj2])
-    cdef RLEs Rs_merged = RLEs(2)  # intersection and union
-    rleMerge(Rs_in._R, Rs_merged._R, Rs_in._n, 1)
-    rleMerge(Rs_in._R, Rs_merged._R + 1, Rs_in._n, 0)
-    rleComplementInplace(Rs_merged._R, 1)  # complement of intersection
-    cdef RLEs Rs_out = RLEs(1)
-    rleMerge(Rs_merged._R, Rs_out._R, 2, 1)  # intersect the complement of intersection with union
-    return _to_leb128_dicts(Rs_out)[0]
 
 def iouMulti(rleObjs):
     cdef RLEs Rs = _from_leb128_dicts(rleObjs)
     cdef RLEs Rs_merged = RLEs(1)  # intersection and union
 
     cdef uint intersection_area;
-    rleMerge(Rs._R, Rs_merged._R, Rs._n, 1)
+    rleMerge(Rs._R, Rs_merged._R, Rs._n, _INTERSECTION)
     rleArea(Rs_merged._R, 1, &intersection_area)
 
     if intersection_area == 0:
         return 0
 
     cdef uint union_area;
-    rleMerge(Rs._R, Rs_merged._R, Rs._n, 0)
+    rleMerge(Rs._R, Rs_merged._R, Rs._n, _UNION)
     rleArea(Rs_merged._R, 1, &union_area)
 
     return intersection_area / union_area
