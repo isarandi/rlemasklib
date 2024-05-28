@@ -1226,8 +1226,9 @@ char *rleToString(const RLE *R) {
             s[p++] = c + 48;  // ascii 48 is '0'. 48-111 is the range of ascii chars we use
         } while (more);
     }
-    s[p++] = 0; // null-terminate the string
-    return realloc(s, sizeof(char) * p);
+    s = realloc(s, sizeof(char) * (p+1)); // Move the realloc call here
+    s[p] = 0; // null-terminate the string
+    return s;
 }
 
 void rleFrString(RLE *R, char *s, siz h, siz w) {
