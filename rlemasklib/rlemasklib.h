@@ -98,3 +98,5 @@ struct UnionFindNode {
 };
 struct UnionFindNode *uf_find(struct UnionFindNode *x);
 void uf_union(struct UnionFindNode *x, struct UnionFindNode *y);
+
+bool applyBoolFunc(bool x, bool y, uint boolfunc);

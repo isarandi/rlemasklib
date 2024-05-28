@@ -103,7 +103,7 @@ void rleDecode(const RLE *R, byte *M, siz n) {
 
 void rleMerge(const RLE *R, RLE *M, siz n, uint boolfunc) {
     uint c, ca, cb, cc, ct;
-    int v, va, vb, v_prev;
+    bool v, va, vb, v_prev;
     siz h = R[0].h, w = R[0].w;
 
     if (n == 0) {
@@ -148,7 +148,7 @@ void rleMerge(const RLE *R, RLE *M, siz n, uint boolfunc) {
 
         ca = A_cnts[0];
         cb = B->cnts[0];
-        v = va = vb = 0;
+        v = va = vb = false;
         m = 0;
         siz a = 1;
         siz b = 1;
@@ -174,14 +174,8 @@ void rleMerge(const RLE *R, RLE *M, siz n, uint boolfunc) {
             ct += cb;
 
             v_prev = v;
+            v = applyBoolFunc(va, vb, boolfunc);
 
-            v = (boolfunc >> (va << 1 | vb)) & 1;
-
-            /*if (intersect) {
-                v = va && vb;
-            } else {
-                v = va || vb;
-            }*/
             if (v != v_prev || ct == 0) {
                 // if the value changed or we consumed all runs, we need to save the current run to the output
                 cnts[m++] = cc;
@@ -195,6 +189,14 @@ void rleMerge(const RLE *R, RLE *M, siz n, uint boolfunc) {
     }
     rleInit(M, h, w, m, cnts, true);
     free(A);
+}
+
+bool applyBoolFunc(bool x, bool y, uint boolfunc){
+    // boolfunc contains in its lowest 4 bits the truth table of the boolean function
+    // (x << 1 | y) is the row index of the truth table (same as x*2 + y)
+    // the value of the boolean function is the bit at that index, so we shift the selected bit to the lowest bit
+    // and mask it with 1 to get this last bit.
+    return (boolfunc >> ((int)x << 1 | (int)y)) & 1;
 }
 
 void rleArea(const RLE *R, siz n, uint *a) {

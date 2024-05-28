@@ -447,11 +447,6 @@ def _decode_uncompressed(rleObjs):
 
 def iou(masks):
     return rlemasklib_cython.iouMulti(masks)
-    # intersection_ = area(intersection(masks))
-    # if intersection_ == 0:
-    #    return 0
-    # union_ = area(union(masks))
-    # return intersection_ / union_
 
 
 def connected_components(rle, connectivity=4, min_size=1):
