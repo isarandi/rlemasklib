@@ -1239,30 +1239,30 @@ char *rleToString(const RLE *R) {
 void rleFrString(RLE *R, char *s, siz h, siz w) {
     uint *cnts = malloc(sizeof(uint) * strlen(s));
     siz m = 0;
-    for (siz p=0; s[p];) {
+    for (siz p = 0; s[p];) {
         long x = 0; // the run length (difference)
         siz k = 0; // the number of bytes (of which 5 bits and a continuation bit are used) in the run length
-        char more;
-        do {
+        while (true) {
             char c = s[p];
             if (!c) {
                 return; // unexpected end of string, last char promised more to come, but lied. Malformed input!
             }
-
             c -= 48; // subtract the offset, so the range is 0-63
-            x |= (long)(c & 0x1f) << k; // take the last 5 bits of the char and shift them to the right position
-            more = c & 0x20; // check the continuation bit
+            x |= (long) (c & 0x1f) << k; // take the last 5 bits of the char and shift them to the right position
+            bool more = c & 0x20; // check the continuation bit
             p++;
             k += 5;
-            if (!more && (c & 0x10)) {
-                x |= -1 << k; // if the highest bit of the last 5 bits is set, set all the remaining bits to 1
+            if (!more) {
+                if (c & 0x10) {
+                    // if the highest bit of the last 5 bits is set, set all the remaining high bits to 1
+                    x |= -1L << k;
+                }
+                break;
             }
-        } while (more);
-
+        }
         if (m > 2) {
             x += cnts[m - 2]; // add the difference to the last run of the same value
         }
-
         cnts[m++] = x;
     }
     rleInit(R, h, w, m, cnts, true);
