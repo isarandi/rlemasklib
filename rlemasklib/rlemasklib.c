@@ -125,7 +125,7 @@ void rleMerge(const RLE *R, RLE *M, siz n, uint boolfunc) {
     siz m;
 
     for (siz i = 1; i < n; i++) {
-        const RLE* B = &R[i];
+        const RLE *B = &R[i];
         if (B->h != h || B->w != w) {
             h = w = m = 0;
             break;
@@ -183,7 +183,7 @@ void rleMerge(const RLE *R, RLE *M, siz n, uint boolfunc) {
             }
         } while (ct > 0); // continue until we consumed all runs from both A and B
 
-        if (i>1) {
+        if (i > 1) {
             rleFree(A); // free the memory of previous intermediate result
         }
     }
@@ -191,12 +191,12 @@ void rleMerge(const RLE *R, RLE *M, siz n, uint boolfunc) {
     free(A);
 }
 
-bool applyBoolFunc(bool x, bool y, uint boolfunc){
+bool applyBoolFunc(bool x, bool y, uint boolfunc) {
     // boolfunc contains in its lowest 4 bits the truth table of the boolean function
     // (x << 1 | y) is the row index of the truth table (same as x*2 + y)
     // the value of the boolean function is the bit at that index, so we shift the selected bit to the lowest bit
     // and mask it with 1 to get this last bit.
-    return (boolfunc >> ((int)x << 1 | (int)y)) & 1;
+    return (boolfunc >> ((int) x << 1 | (int) y)) & 1;
 }
 
 void rleArea(const RLE *R, siz n, uint *a) {
@@ -374,7 +374,7 @@ void rlePad(const RLE *R, RLE *M, siz n, const uint *pad_amounts) {
                 M[i].cnts[m] = end_px_addition;
             } else {
                 rleInit(&M[i], h_out, w_out, m, R[i].cnts, false);
-                M[i].cnts[0] += + start_px_addition;
+                M[i].cnts[0] += +start_px_addition;
                 M[i].cnts[m - 1] += end_px_addition;
             }
             continue;
@@ -409,14 +409,14 @@ void rlePad(const RLE *R, RLE *M, siz n, const uint *pad_amounts) {
         for (siz j = 0; j < m; ++j) {
             uint n_cols_spanned = (y + R[i].cnts[j] - 1) / h;
             uint n_cols_completed = (y + R[i].cnts[j]) / h;
-            if (j%2 == 0) {
+            if (j % 2 == 0) {
                 // run of 0s, make it longer
                 cnts[j_out++] = R[i].cnts[j] + n_cols_completed * pad_vertical + (carry_over ? pad_vertical : 0);
             } else {
                 // run of 1s
                 if (n_cols_spanned > 0) {
                     cnts[j_out++] = h - y; // 1s
-                    for (siz k = 0; k < n_cols_spanned-1; ++k) {
+                    for (siz k = 0; k < n_cols_spanned - 1; ++k) {
                         cnts[j_out++] = pad_vertical; // 0s
                         cnts[j_out++] = h; // 1s
                     }
@@ -432,7 +432,7 @@ void rlePad(const RLE *R, RLE *M, siz n, const uint *pad_amounts) {
 
         cnts[0] += start_px_addition;
 
-        if (m%2 == 0) {
+        if (m % 2 == 0) {
             // original ends with 1s run
             if (end_px_addition > 0) {
                 // new run of 0s is the last one
@@ -466,7 +466,7 @@ void rleConnectedComponents(const RLE *R_in, int connectivity, siz min_size, RLE
 
     // initially each run of 1s is a separate component
     struct UnionFindNode *uf = calloc(m / 2, sizeof(struct UnionFindNode));
-    for (siz i = 1; i < m; i+=2) {
+    for (siz i = 1; i < m; i += 2) {
         uf[i / 2].size = cnts[i];  // initialize the size of the component to the size of the run of 1s
     }
 
@@ -482,13 +482,15 @@ void rleConnectedComponents(const RLE *R_in, int connectivity, siz min_size, RLE
         // Step to the next run. Advance either the first or the second run, depending on which one ends first
         // Taking into account that we need a lag of h between the runs to be in neighboring columns.
         if (r1 + cnts[i1] + h < r2 + cnts[i2]) {
-            if (i1 + 1 >= m)
+            if (i1 + 1 >= m) {
                 break;
+            }
             r1 += cnts[i1] + cnts[i1 + 1];
             i1 += 2;
         } else {
-            if (i2 + 1 >= m)
+            if (i2 + 1 >= m) {
                 break;
+            }
             r2 += cnts[i2] + cnts[i2 + 1];
             i2 += 2;
         }
@@ -512,7 +514,7 @@ void rleConnectedComponents(const RLE *R_in, int connectivity, siz min_size, RLE
     uint *new_labels = malloc(sizeof(uint) * (m / 2));
 
     for (siz i = 1; i < m; i += 2) {
-        struct UnionFindNode* root = uf_find(&uf[i / 2]);
+        struct UnionFindNode *root = uf_find(&uf[i / 2]);
         if (root->size < min_size) {
             new_labels[i / 2] = m; // this run is too small to be kept
             continue;
@@ -529,7 +531,7 @@ void rleConnectedComponents(const RLE *R_in, int connectivity, siz min_size, RLE
         new_labels[i / 2] = new_label;
         // A new pair of runs is not added if the previous label was the same and the run of 0s was empty
         // This happens if a run of 1s got split earlier but then turned out to belong to the same component.
-        if (i==1 || new_label != new_labels[i / 2 - 1] || cnts[i - 1] > 0) {
+        if (i == 1 || new_label != new_labels[i / 2 - 1] || cnts[i - 1] > 0) {
             new_label_to_component_m[new_label] += 2;
         }
     }
@@ -565,7 +567,7 @@ void rleConnectedComponents(const RLE *R_in, int connectivity, siz min_size, RLE
         if (new_label == m) {
             // This run is too small to be kept
         } else if (
-                new_label_to_cnts[new_label] - rles_out[new_label].cnts > 1  &&
+                new_label_to_cnts[new_label] - rles_out[new_label].cnts > 1 &&
                 new_label_to_cnts[new_label][-1] == 0) {
             // The new run belongs to the same label as the previous and the run of 0s in between has size 0,
             // so we just extend the previous run of 1s and 0s.
@@ -718,7 +720,7 @@ void rleChunkupInplace(RLE *R, siz n) {
         r = 0;
         for (siz j = 0; j < m; j++) {
             uint cnt = R[i].cnts[j];
-            uint y = r%h;
+            uint y = r % h;
             cnts[j_out++] = umin(cnt, h - y); // until the bottom
 
             uint n_full_cols = (y + cnt) / h - 1;
@@ -765,7 +767,7 @@ void rleEliminateZeroRuns(RLE *R, siz n) {
     }
 }
 
-void rleShrink(RLE* R) {
+void rleShrink(RLE *R) {
     R->cnts = realloc(R->cnts, sizeof(uint) * R->m);
 }
 
@@ -1159,7 +1161,7 @@ void rleCentroid(const RLE *R, double *xys, siz n) {
         uint area = 0;
         double x = 0, y = 0;
 
-        for (siz j = 0; j < m; j ++) {
+        for (siz j = 0; j < m; j++) {
             uint cnt = R[i].cnts[j];
 
             if (j % 2 == 1) { // run of 1s
@@ -1168,13 +1170,13 @@ void rleCentroid(const RLE *R, double *xys, siz n) {
                 uint start_col = pos / h;
                 uint cnt1 = umin(cnt, h - (pos % h));
                 x += start_col * cnt1;
-                y += ((pos % h) + (cnt1 - 1) *0.5) * cnt1;
+                y += ((pos % h) + (cnt1 - 1) * 0.5) * cnt1;
 
                 // second part is multiple full columns
                 uint num_full_cols = (cnt - cnt1) / h;
                 uint cnt2 = num_full_cols * h;
                 if (cnt2) {
-                    x += (start_col + 1 + (num_full_cols - 1) *0.5) * cnt2;
+                    x += (start_col + 1 + (num_full_cols - 1) * 0.5) * cnt2;
                     y += ((h - 1) * 0.5) * cnt2;
                 }
 
@@ -1182,7 +1184,7 @@ void rleCentroid(const RLE *R, double *xys, siz n) {
                 uint cnt3 = cnt - cnt1 - cnt2;
                 if (cnt3) {
                     x += (start_col + num_full_cols + 1) * cnt3;
-                    y += ((cnt3 - 1) *0.5) * cnt3;
+                    y += ((cnt3 - 1) * 0.5) * cnt3;
                 }
             }
             pos += cnt;
@@ -1228,7 +1230,7 @@ char *rleToString(const RLE *R) {
             s[p++] = c + 48;  // ascii 48 is '0'. 48-111 is the range of ascii chars we use
         } while (more);
     }
-    s = realloc(s, sizeof(char) * (p+1)); // Move the realloc call here
+    s = realloc(s, sizeof(char) * (p + 1));
     s[p] = 0; // null-terminate the string
     return s;
 }
