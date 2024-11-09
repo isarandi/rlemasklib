@@ -988,24 +988,25 @@ void rleToBbox(const RLE *R, BB bb, siz n) {
 //        rleFrPoly(R + i, xy, 4, h, w);
 //    }
 //}
-
+//
 void rleFrBbox(RLE *R, const BB bb, siz h, siz w, siz n) {
-    for (siz i=0; i < n; i++) {
-        siz xs = round(bb[4 * i + 0]);
-        siz ys = round(bb[4 * i + 1]);
-        siz xe = round(bb[4 * i + 0] + bb[4 * i + 2]);
-        siz ye = round(bb[4 * i + 1] + bb[4 * i + 3]);
-        xe = xe > w ? w : xe;
-        ye = ye > h ? h : ye;
-        siz bw = xe - xs;
-        siz bh = ye - ys;
+    for (siz i = 0; i < n; i++) {
+        double xs_ = fmax(0, fmin(w, bb[4 * i + 0]));
+        double ys_ = fmax(0, fmin(h, bb[4 * i + 1]));
+        double xe_ = fmax(0, fmin(w, bb[4 * i + 0] + bb[4 * i + 2]));
+        double ye_ = fmax(0, fmin(h, bb[4 * i + 1] + bb[4 * i + 3]));
+        siz xs = round(xs_);
+        siz ys = round(ys_);
+        siz xe = round(xe_);
+        siz ye = round(ye_);
+        siz bw = (xs <= xe ? xe - xs : 0);
+        siz bh = (ys <= ye ? ye - ys : 0);
         siz m;
         if (bw == 0 || bh == 0) {
             rleInit(R + i, h, w, 1, NULL, false);
             R[i].cnts[0] = h * w;
             continue;
         }
-
         if (bh == h) {
             // if the bounding box spans the entire height, it will have a single run of 1s.
             m = (xe == w ? 2 : 3);
@@ -1027,8 +1028,8 @@ void rleFrBbox(RLE *R, const BB bb, siz h, siz w, siz n) {
             }
         }
 
-        if (xe < w) {
-            R[i].cnts[m - 1] =  h * (w - xe) + (h - ye); // run of 0s
+        if (!(xe == w && ye == h)) {
+            R[i].cnts[m - 1] = h * (w - xe) + (h - ye); // run of 0s
         }
     }
 }
