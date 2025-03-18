@@ -34,4 +34,4 @@ pip install git+https://github.com/isarandi/rlemasklib.git
 
 # Documentation
 
-The full documentation is coming soon.
+The documentation can be found at [https://istvansarandi.com/docs/rlemasklib/](https://istvansarandi.com/docs/rlemasklib/).

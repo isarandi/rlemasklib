@@ -1,6 +1,8 @@
 API Reference
 =============
 
+Start at :class:`rlemasklib.RLEMask` to explore the object-oriented API.
+
 .. toctree::
    :titlesonly:
 

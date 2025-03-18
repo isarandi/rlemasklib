@@ -93,3 +93,7 @@ from rlemasklib.rlemasklib import (
     BoolFunc,
     merge,
 )
+
+# set the __module__ attribute of all functions to this module
+for x in __all__:
+    globals()[x].__module__ = __name__

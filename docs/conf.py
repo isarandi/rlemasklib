@@ -2,13 +2,10 @@ import datetime
 import importlib
 import os
 import sys
+from urllib.parse import quote
 
-#sys.path.insert(0, os.path.abspath('.'))
-#sys.path.insert(0, os.path.abspath('../src'))
-
-sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
-#sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src/rlemasklib')))
+sys.path.insert(0, os.path.abspath('.'))
+sys.path.insert(0, os.path.abspath('../src'))
 
 
 from conf_spec import project, project_slug, release
@@ -27,15 +24,18 @@ copyright = f'{datetime.datetime.now().year}, {author}'
 add_module_names = False
 python_use_unqualified_type_names = True
 extensions = [
+
     'sphinx.ext.autodoc',
     'sphinx.ext.napoleon',
     'sphinx.ext.autosummary',
     'sphinx.ext.intersphinx',
+    'sphinx.ext.linkcode',
     'sphinx.ext.autodoc.typehints',
     'sphinxcontrib.bibtex',
     'autoapi.extension',
     'sphinx.ext.viewcode',
     'sphinx.ext.inheritance_diagram',
+    'sphinx_codeautolink',
 ]
 bibtex_bibfiles = ['abbrev_long.bib', 'references.bib']
 bibtex_footbibliography_header = ".. rubric:: References"
@@ -85,7 +85,6 @@ autoclass_content = 'class'
 autosummary_generate = True
 autosummary_imported_members = False
 
-
 def autodoc_skip_member(app, what, name, obj, skip, options):
     """
     Skip members (functions, classes, modules) without docstrings.
@@ -103,7 +102,23 @@ def autodoc_skip_member(app, what, name, obj, skip, options):
             pass
 
 
+def linkcode_resolve(domain, info):
+    if domain != 'py':
+        return None
+    if not info['module']:
+        return None
+    filename = quote(info['module'].replace('.', '/'))
+    if not filename.startswith("tests"):
+        filename = "src/" + filename
+    if "fullname" in info:
+        anchor = info["fullname"]
+        anchor = "#:~:text=" + quote(anchor.split(".")[-1])
+    else:
+        anchor = ""
+
+    result = f'https://github.com/isarandi/{project_slug}/blob/main/{filename}.py{anchor}'
+    return result
+
 def setup(app):
-    pass
-    # app.connect('autoapi-skip-member', autodoc_skip_member)
-    # app.connect('autodoc-skip-member', autodoc_skip_member)
+    app.connect('autoapi-skip-member', autodoc_skip_member)
+    app.connect('autodoc-skip-member', autodoc_skip_member)

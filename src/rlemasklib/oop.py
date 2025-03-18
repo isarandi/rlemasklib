@@ -10,16 +10,28 @@ from rlemasklib.oop_cython import RLECy
 class RLEMask:
     """Run-length encoded mask.
 
+    The RLEMask class represents a binary mask using run-length encoding. The mask can be
+    created from a dense array, a bounding box, a polygon, or a circle, or from run-length
+    counts. The mask can be manipulated using set operations like union, intersection, and
+    difference, and can be converted to a dense array. Morphological operations, warping,
+    transpose, flipping, cropping, padding, connected components, and other operations are
+    also supported.
+
+    The main constructor can take a dense array, a dictionary, or a list of run-length counts.
+
+    It is recommended to use the static factory methods :meth:`from_array`, :meth:`from_dict`,
+    :meth:`from_counts`, :meth:`from_bbox`, :meth:`from_polygon`, :meth:`zeros`, and :meth:`ones`
+    to create new RLEMask objects, as they are more explicit.
+
     Args:
-        shape: [height, width] of the mask
-        counts: the run-length counts of the mask, as a list of integers or a numpy array,
-            where odd-indexed elements are runs of 0s and even-indexed elements are runs of 1s.
-            The sum of the counts must be equal to height * width.
+        obj: the input object to create the mask from. It can be a dense 2D array, a dictionary, or
+            a list/1D-array of run-length counts.
+        shape: [height, width] of the mask, in case the input is a list of run-length counts.
     """
 
     __slots__ = ['cy']
 
-    def __init__(self, /, obj, *, shape: Optional[Sequence[int]] = None):
+    def __init__(self, obj, *, shape: Optional[Sequence[int]] = None):
         self.cy = RLECy()
         if isinstance(obj, np.ndarray) and obj.ndim == 2:
             self.cy._i_from_array(obj)
@@ -77,7 +89,7 @@ class RLEMask:
         foreground and less than 128 are considered background.
 
         If `mask_array` is C contiguous, a transpose has to take place since the internal RLE
-        format encodecs the mask in Fortran order. If `is_sparse` is set to True, the transpose,
+        format encodes the mask in Fortran order. If `is_sparse` is set to True, the transpose,
         if necessary, will be performed in RLE format, otherwise it will be performed in dense
         array format.
 
@@ -653,11 +665,11 @@ class RLEMask:
             arr = arr.astype(dtype, copy=False)
         return arr
 
-    def any(self):
+    def any(self) -> bool:
         """Check if any pixel in the mask is foreground."""
         return len(self.counts_view) > 1
 
-    def all(self):
+    def all(self) -> bool:
         """Check if all pixels in the mask are foreground."""
         counts_view = self.counts_view
         return len(counts_view) == 2 and counts_view[0] == 0

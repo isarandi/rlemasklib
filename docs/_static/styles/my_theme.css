@@ -62,3 +62,15 @@ body {
 .bd-sidebar-primary {
     width: 15%;
 }
+
+/* Ensure links in code blocks are underlined */
+.highlight a {
+    text-decoration: underline;
+    color: #d63384; /* Adjust color as needed */
+}
+
+/* For additional emphasis, change hover effect */
+.highlight a:hover {
+    text-decoration: underline;
+    color: #ff4081;
+}

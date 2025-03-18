@@ -48,7 +48,7 @@ Creating an RLEMask from a NumPy Array
 .. code-block:: python
 
     import numpy as np
-    from rlemasklib.oop import RLEMask
+    from rlemasklib import RLEMask
 
     # Create a simple binary mask
     mask = np.array([
@@ -69,6 +69,8 @@ Boolean Operations on Masks
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
+
+    from rlemasklib import RLEMask
 
     mask1 = RLEMask.from_array(np.array([
         [1, 0, 1],
