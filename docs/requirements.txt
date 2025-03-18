@@ -8,3 +8,5 @@ sphinx-autodoc-napoleon-typehints
 sphinx-rtd-theme
 pydata-sphinx-theme
 sphinxcontrib-napoleon
+Cython
+numpy

@@ -33,7 +33,7 @@ The library can be installed with pip from GitHub:
     pip install git+https://github.com/isarandi/rlemasklib.git
 
 Object-Oriented Usage
--------------------
+---------------------
 
 The object-oriented API is the more recent one and is centered around the :class:`rlemasklib.RLEMask` class, which represents a single binary mask in run-length encoded form. The foreground is considered as 1s, and the background as 0s.
 
@@ -43,7 +43,7 @@ This is the main recommended way to use the library.
 
 
 Creating an RLEMask from a NumPy Array
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -168,7 +168,7 @@ See the full documentation of available features at :class:`rlemasklib.RLEMask`.
 
 
 Functional Usage
---------------
+----------------
 
 The functional API is the original one and it works with dictionaries as in the COCO API. In this case, the masks are represented as
 dictionary entries with the keys 'counts' and 'size'. The 'counts' field contains the runlengths compressed
