@@ -1,10 +1,10 @@
 sphinx
 sphinxcontrib-bibtex
 sphinx-autoapi
+sphinx-autobuild
 sphinx-autodoc-typehints
+sphinxcontrib-prettyspecialmethods
+sphinx-autodoc-napoleon-typehints
 sphinx-rtd-theme
 pydata-sphinx-theme
 sphinxcontrib-napoleon
-sphinxcontrib-viewcode
-sphinxcontrib-inheritance-diagram
-sphinx-autosummary-accessors
