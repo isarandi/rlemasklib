@@ -24,6 +24,9 @@ _UNION = 14
 cdef extern from "numpy/arrayobject.h":
     void PyArray_ENABLEFLAGS(np.ndarray arr, int flags)
 
+cdef extern from "stdbool.h":
+    ctypedef int bool
+
 # Declare the prototype of the C functions in rlemasklib.h
 cdef extern from "basics.h" nogil:
     ctypedef unsigned int uint
@@ -40,7 +43,7 @@ cdef extern from "basics.h" nogil:
 
 cdef extern from "encode_decode.h" nogil:
     void rleEncode(RLE *R, const byte *M, siz h, siz w, siz n)
-    void rleDecode(const RLE *R, byte *mask, siz n, byte value)
+    bool rleDecode(const RLE *R, byte *mask, siz n, byte value)
     char *rleToString(const RLE *R)
     void rleFrString(RLE *R, const char *s, siz h, siz w)
 
@@ -68,7 +71,8 @@ cdef extern from "shapes.h" nogil:
     void rleFrPoly(RLE *R, const double *xy, siz k, siz h, siz w)
 
 cdef extern from "connected_components.h" nogil:
-    void rleConnectedComponents(const RLE *R_in, int connectivity, siz min_size, RLE ** components, siz *n)
+    void rleConnectedComponents(const RLE *R_in, int connectivity, siz min_size, RLE ** components,
+                                siz *n)
 
 cdef extern from "transpose_flip.h" nogil:
     void rleTranspose(const RLE *R, RLE * M)
@@ -179,10 +183,12 @@ def _from_leb128_dicts(rleObjs):
     Rs = RLEs(n)
     cdef bytes py_string
     cdef char * c_string
+    cdef uint sum_counts
     for i, obj in enumerate(rleObjs):
         py_string = str.encode(obj['counts']) if type(obj['counts']) == str else obj['counts']
         c_string = py_string
         rleFrString(<RLE *> &Rs._R[i], <const char *> c_string, obj['size'][0], obj['size'][1])
+
     return Rs
 
 # encode mask to RLEs objects
@@ -216,7 +222,9 @@ def decode(rleObjs):
     cdef RLEs Rs = _from_leb128_dicts(rleObjs)
     h, w, n = Rs._R[0].h, Rs._R[0].w, Rs._n
     masks = Masks(h, w, n)
-    rleDecode(<RLE *> Rs._R, masks._mask, n, 1)
+    cdef bool success = rleDecode(<RLE *> Rs._R, masks._mask, n, 1)
+    if not success:
+        raise ValueError('Invalid RLE: Run-lengths do not match the mask size')
     return np.array(masks)
 
 def _from_uncompressed_dicts(rleObjs):
@@ -224,14 +232,23 @@ def _from_uncompressed_dicts(rleObjs):
     Rs = RLEs(n)
     cdef bytes py_string
     cdef char * c_string
+    cdef uint sum_counts
     for i, obj in enumerate(rleObjs):
         counts = np.asarray(obj['ucounts'], dtype=np.uint32)
         Rs._R[i].cnts = <uint *> malloc(counts.shape[0] * sizeof(uint))
 
         data = <uint *> malloc(len(counts) * sizeof(uint))
+        sum_counts = 0
         for j in range(len(counts)):
             data[j] = <uint> counts[j]
+            sum_counts += data[j]
         Rs._R[i] = RLE(obj['size'][0], obj['size'][1], len(counts), <uint *> data)
+
+        if sum_counts != Rs._R[i].h * Rs._R[i].w:
+            raise ValueError(
+                f'Invalid RLE: Sum of runlengths is {sum_counts}, which does not match the '
+                f'expected {Rs._R[i].h * Rs._R[i].w} based on the mask height {Rs._R[i].h} and '
+                f'width {Rs._R[i].w}')
 
     return Rs
 
@@ -239,7 +256,9 @@ def decodeUncompressed(ucRles):
     cdef RLEs Rs = _from_uncompressed_dicts(ucRles)
     h, w, n = Rs._R[0].h, Rs._R[0].w, Rs._n
     masks = Masks(h, w, n)
-    rleDecode(<RLE *> Rs._R, masks._mask, n, 1)
+    cdef bool success = rleDecode(<RLE *> Rs._R, masks._mask, n, 1)
+    if not success:
+        raise ValueError('Invalid RLE: Run-lengths do not match the mask size')
     return np.array(masks)
 
 def merge(rleObjs, boolfunc=14):
@@ -301,12 +320,15 @@ def iou(dt, gt, pyiscrowd):
                 objs = objs.reshape((objs[0], 1))
             # check if it's Nx4 bbox
             if not len(objs.shape) == 2 or not objs.shape[1] == 4:
-                raise Exception('numpy ndarray input is only for *bounding boxes* and should have Nx4 dimension')
+                raise Exception(
+                    'numpy ndarray input is only for *bounding boxes* and should have Nx4 dimension')
             objs = objs.astype(np.double)
         elif type(objs) == list:
             # check if list is in box format and convert it to np.ndarray
             isbox = np.all(
-                np.array([(len(obj) == 4) and ((type(obj) == list) or (type(obj) == np.ndarray)) for obj in objs]))
+                np.array(
+                    [(len(obj) == 4) and ((type(obj) == list) or (type(obj) == np.ndarray)) for obj
+                     in objs]))
             isrle = np.all(np.array([type(obj) == dict for obj in objs]))
             if isbox:
                 objs = np.array(objs, dtype=np.double)
@@ -324,7 +346,8 @@ def iou(dt, gt, pyiscrowd):
                 np.ndarray[np.double_t, ndim=1] _iou):
         rleIou(<RLE *> dt._R, <RLE *> gt._R, m, n, <byte *> iscrowd.data, <double *> _iou.data)
     def _bbIou(np.ndarray[np.double_t, ndim=2] dt, np.ndarray[np.double_t, ndim=2] gt,
-               np.ndarray[np.uint8_t, ndim=1] iscrowd, siz m, siz n, np.ndarray[np.double_t, ndim=1] _iou):
+               np.ndarray[np.uint8_t, ndim=1] iscrowd, siz m, siz n,
+               np.ndarray[np.double_t, ndim=1] _iou):
         bbIou(<BB> dt.data, <BB> gt.data, m, n, <byte *> iscrowd.data, <double *> _iou.data)
     def _len(obj):
         cdef siz N = 0
@@ -346,7 +369,8 @@ def iou(dt, gt, pyiscrowd):
     if m == 0 or n == 0:
         return []
     if not type(dt) == type(gt):
-        raise Exception('The dt and gt should have the same data type, either RLEs, list or np.ndarray')
+        raise Exception(
+            'The dt and gt should have the same data type, either RLEs, list or np.ndarray')
 
     # define local variables
     cdef double * _iou = <double *> 0

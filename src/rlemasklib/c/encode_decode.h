@@ -3,7 +3,7 @@
 
 void rleEncode(RLE *R, const byte *M, siz h, siz w, siz n);
 void rleEncodeThresh128(RLE *R, const byte *M, siz h, siz w, siz n);
-void rleDecode(const RLE *R, byte *M, siz n, byte value);
+bool rleDecode(const RLE *R, byte *M, siz n, byte value);
 void rlesToLabelMapZeroInit(const RLE **R, byte *M, siz n);
 
 char *rleToString(const RLE *R);

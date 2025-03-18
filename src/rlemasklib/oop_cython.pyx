@@ -46,9 +46,9 @@ cdef extern from "basics.h" nogil:
 cdef extern from "encode_decode.h" nogil:
     void rleEncode(RLE *R, const byte *M, siz h, siz w, siz n)
     void rleEncodeThresh128(RLE *R, const byte *M, siz h, siz w, siz n)
-    void rleDecode(const RLE *R, byte *mask, siz n, byte value)
+    bool rleDecode(const RLE *R, byte *mask, siz n, byte value)
     char *rleToString(const RLE *R)
-    void rleFrString(RLE *R, char *s, siz h, siz w)
+    uint rleFrString(RLE *R, char *s, siz h, siz w)
     void rlesToLabelMapZeroInit(const RLE **R, siz n, byte *label_map)
 
 
@@ -675,20 +675,27 @@ cdef class RLECy:
     def _r_to_dense_array(self, value, order) -> np.ndarray:
         cdef byte[::1] data
         cdef RLECy transp
+        cdef bool success
         if self.r.h > 0 and self.r.w > 0:
             arr = np.zeros(shape=(self.r.h * self.r.w,), dtype=np.uint8)
             data = arr
             if order == 'F':
-                rleDecode(&self.r, &data[0], 1, value)
+                success = rleDecode(&self.r, &data[0], 1, value)
+                if not success:
+                    raise ValueError("Invalid RLE, sum of runlengths exceeds the number of pixels")
                 return arr.reshape(self.shape, order='F')
             else:
                 is_sparse = self.r.m < self.r.h * self.r.w * 0.04
                 if is_sparse:
                     transp = self._r_transpose()
-                    rleDecode(&transp.r, &data[0], 1, value)
+                    success = rleDecode(&transp.r, &data[0], 1, value)
+                    if not success:
+                        raise ValueError("Invalid RLE, sum of runlengths exceeds the number of pixels")
                     return arr.reshape(self.shape, order='C')
                 else:
-                    rleDecode(&self.r, &data[0], 1, value)
+                    success = rleDecode(&self.r, &data[0], 1, value)
+                    if not success:
+                        raise ValueError("Invalid RLE, sum of runlengths exceeds the number of pixels")
                     return np.ascontiguousarray(arr.reshape(self.shape, order='F'))
         else:
             return np.empty((self.r.h, self.r.w), dtype=np.uint8)
