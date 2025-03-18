@@ -1,0 +1,10 @@
+sphinx
+sphinxcontrib-bibtex
+sphinx-autoapi
+sphinx-autodoc-typehints
+sphinx-rtd-theme
+pydata-sphinx-theme
+sphinxcontrib-napoleon
+sphinxcontrib-viewcode
+sphinxcontrib-inheritance-diagram
+sphinx-autosummary-accessors
