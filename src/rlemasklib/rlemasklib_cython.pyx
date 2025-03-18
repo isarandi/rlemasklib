@@ -1,6 +1,4 @@
 # cython: language_level=3
-# distutils: language = c
-# distutils: sources = rlemasklib/rlemasklib.c
 
 #**************************************************************************
 # Based on code from the Microsoft COCO Toolbox.      version 2.0
@@ -8,16 +6,12 @@
 # Modifications by Istvan Sarandi, 2023
 # Licensed under the Simplified BSD License [see coco/license.txt]
 #**************************************************************************
-import sys
-
-PYTHON_VERSION = sys.version_info[0]
 
 # import both Python-level and C-level symbols of Numpy
 # the API uses Numpy to interface C and Python
 import numpy as np
 cimport numpy as np
-from libc.stdlib cimport malloc, free
-from cpython.bytes cimport PyBytes_FromStringAndSize
+from libc.stdlib cimport malloc, free, calloc
 
 # intialized Numpy. must do.
 np.import_array()
@@ -31,7 +25,7 @@ cdef extern from "numpy/arrayobject.h":
     void PyArray_ENABLEFLAGS(np.ndarray arr, int flags)
 
 # Declare the prototype of the C functions in rlemasklib.h
-cdef extern from "rlemasklib.h":
+cdef extern from "basics.h" nogil:
     ctypedef unsigned int uint
     ctypedef unsigned long siz
     ctypedef unsigned char byte
@@ -42,24 +36,64 @@ cdef extern from "rlemasklib.h":
         siz m,
         uint * cnts,
     void rlesInit(RLE ** R, siz n)
+    void rlesFree(RLE ** R, siz n)
+
+cdef extern from "encode_decode.h" nogil:
     void rleEncode(RLE *R, const byte *M, siz h, siz w, siz n)
-    void rleDecode(const RLE *R, byte *mask, siz n)
-    void rleMerge(const RLE *R, RLE *M, siz n, uint boolfunc)
-    void rleArea(const RLE *R, siz n, uint *a)
+    void rleDecode(const RLE *R, byte *mask, siz n, byte value)
+    char *rleToString(const RLE *R)
+    void rleFrString(RLE *R, const char *s, siz h, siz w)
+
+cdef extern from "boolfuncs.h" nogil:
     void rleComplement(const RLE *R_in, RLE *R_out, siz n)
     void rleComplementInplace(RLE *R_in, siz n)
+    void rleMerge(const RLE *R, RLE *M, siz n, uint boolfunc)
+
+cdef extern from "moments.h" nogil:
+    void rleArea(const RLE *R, siz n, uint *a)
+    void rleCentroid(const RLE *R, double *xys, siz n)
+
+cdef extern from "pad_crop.h" nogil:
     void rleCrop(const RLE *R_in, RLE *R_out, siz n, const uint * bbox);
     void rleCropInplace(RLE *R_in, siz n, const uint * bbox);
-    void rlePad(const RLE *R_in, RLE *R_out, siz n, const uint * pad_amounts);
+    void rleZeroPad(const RLE *R_in, RLE *R_out, siz n, const uint * pad_amounts);
+
+cdef extern from "iou_nms.h" nogil:
     void rleIou(RLE *dt, RLE *gt, siz m, siz n, byte *iscrowd, double *o)
     void bbIou(BB dt, BB gt, siz m, siz n, byte *iscrowd, double *o)
+
+cdef extern from "shapes.h" nogil:
     void rleToBbox(const RLE *R, BB bb, siz n)
     void rleFrBbox(RLE *R, const BB bb, siz h, siz w, siz n)
     void rleFrPoly(RLE *R, const double *xy, siz k, siz h, siz w)
-    char * rleToString(const RLE *R)
-    void rleFrString(RLE *R, char *s, siz h, siz w)
-    void rleConnectedComponents(const RLE *R_in, int connectivity, siz min_size, RLE ** components, siz *n);
-    void rleCentroid(const RLE *R, double *xys, siz n);
+
+cdef extern from "connected_components.h" nogil:
+    void rleConnectedComponents(const RLE *R_in, int connectivity, siz min_size, RLE ** components, siz *n)
+
+cdef extern from "transpose_flip.h" nogil:
+    void rleTranspose(const RLE *R, RLE * M)
+
+
+#
+# def leb128_enc(np.ndarray[np.int32_t, ndim=1] cnts):
+#     cdef char *encoded
+#     cdef siz n_encoded
+#     leb128_encode(<int *> cnts.data, cnts.shape[0], &encoded, &n_encoded)
+#     cdef np.npy_intp shape[1]
+#     shape[0] = <np.npy_intp> n_encoded
+#     a = np.PyArray_SimpleNewFromData(1, shape, np.NPY_UINT8, encoded)
+#     PyArray_ENABLEFLAGS(a, np.NPY_OWNDATA)
+#     return a
+#
+# def leb128_enc2(np.ndarray[np.int32_t, ndim=1] cnts):
+#     cdef char *encoded
+#     cdef siz n_encoded
+#     leb128_encode2(<int *> cnts.data, cnts.shape[0], &encoded, &n_encoded)
+#     cdef np.npy_intp shape[1]
+#     shape[0] = <np.npy_intp> n_encoded
+#     a = np.PyArray_SimpleNewFromData(1, shape, np.NPY_UINT8, encoded)
+#     PyArray_ENABLEFLAGS(a, np.NPY_OWNDATA)
+#     return a
 
 
 # python class to wrap RLE array in C
@@ -74,10 +108,7 @@ cdef class RLEs:
 
     # free the RLE array here
     def __dealloc__(self):
-        if self._R is not NULL:
-            for i in range(self._n):
-                free(self._R[i].cnts)
-            free(self._R)
+        rlesFree(&self._R, self._n)
     def __getattr__(self, key):
         if key == 'n':
             return self._n
@@ -92,7 +123,7 @@ cdef class Masks:
     cdef siz _n
 
     def __cinit__(self, h, w, n):
-        self._mask = <byte *> malloc(h * w * n * sizeof(byte))
+        self._mask = <byte *> calloc(h * w * n, sizeof(byte))
         self._h = h
         self._w = w
         self._n = n
@@ -105,8 +136,8 @@ cdef class Masks:
         cdef np.npy_intp shape[1]
         shape[0] = <np.npy_intp> self._h * self._w * self._n
         # Create a 1D array, and reshape it to fortran/Matlab column-major array
-        ndarray = np.PyArray_SimpleNewFromData(1, shape, np.NPY_UINT8, self._mask).reshape((self._h, self._w, self._n),
-                                                                                           order='F')
+        ndarray = np.PyArray_SimpleNewFromData(1, shape, np.NPY_UINT8, self._mask).reshape(
+            (self._h, self._w, self._n), order='F')
         # The _mask allocated by Masks is now handled by ndarray
         PyArray_ENABLEFLAGS(ndarray, np.NPY_OWNDATA)
         return ndarray
@@ -115,7 +146,7 @@ cdef class Masks:
 def _to_leb128_dicts(RLEs Rs):
     cdef siz n = Rs.n
     cdef bytes py_string
-    cdef char * c_string
+    cdef char *c_string
     objs = []
     for i in range(n):
         c_string = rleToString(<RLE *> &Rs._R[i])
@@ -149,14 +180,9 @@ def _from_leb128_dicts(rleObjs):
     cdef bytes py_string
     cdef char * c_string
     for i, obj in enumerate(rleObjs):
-        if PYTHON_VERSION == 2:
-            py_string = str(obj['counts']).encode('utf8')
-        elif PYTHON_VERSION == 3:
-            py_string = str.encode(obj['counts']) if type(obj['counts']) == str else obj['counts']
-        else:
-            raise Exception('Python version must be 2 or 3')
+        py_string = str.encode(obj['counts']) if type(obj['counts']) == str else obj['counts']
         c_string = py_string
-        rleFrString(<RLE *> &Rs._R[i], <char *> c_string, obj['size'][0], obj['size'][1])
+        rleFrString(<RLE *> &Rs._R[i], <const char *> c_string, obj['size'][0], obj['size'][1])
     return Rs
 
 # encode mask to RLEs objects
@@ -164,18 +190,33 @@ def _from_leb128_dicts(rleObjs):
 def encode(np.ndarray[np.uint8_t, ndim=3, mode='fortran'] mask, compress_leb128=True):
     h, w, n = mask.shape[0], mask.shape[1], mask.shape[2]
     cdef RLEs Rs = RLEs(n)
-    rleEncode(Rs._R, <byte *> mask.data, h, w, n)
+    rleEncode(Rs._R, <const byte *> mask.data, h, w, n)
     if compress_leb128:
         return _to_leb128_dicts(Rs)
     else:
         return _to_uncompressed_dicts(Rs)
+
+def encode_C_order_sparse(
+        np.ndarray[np.uint8_t, ndim=3, mode='c'] mask, compress_leb128=True):
+    n, h, w = mask.shape[0], mask.shape[1], mask.shape[2]
+    cdef RLEs Rs = RLEs(n)
+    rleEncode(Rs._R, <const byte *> mask.data, w, h, n)
+
+    cdef RLEs Rs_transp = RLEs(n)
+    for i in range(n):
+        rleTranspose(<RLE *> &Rs._R[i], <RLE *> &Rs_transp._R[i])
+
+    if compress_leb128:
+        return _to_leb128_dicts(Rs_transp)
+    else:
+        return _to_uncompressed_dicts(Rs_transp)
 
 # decode mask from compressed list of RLE string or RLEs object
 def decode(rleObjs):
     cdef RLEs Rs = _from_leb128_dicts(rleObjs)
     h, w, n = Rs._R[0].h, Rs._R[0].w, Rs._n
     masks = Masks(h, w, n)
-    rleDecode(<RLE *> Rs._R, masks._mask, n)
+    rleDecode(<RLE *> Rs._R, masks._mask, n, 1)
     return np.array(masks)
 
 def _from_uncompressed_dicts(rleObjs):
@@ -198,7 +239,7 @@ def decodeUncompressed(ucRles):
     cdef RLEs Rs = _from_uncompressed_dicts(ucRles)
     h, w, n = Rs._R[0].h, Rs._R[0].w, Rs._n
     masks = Masks(h, w, n)
-    rleDecode(<RLE *> Rs._R, masks._mask, n)
+    rleDecode(<RLE *> Rs._R, masks._mask, n, 1)
     return np.array(masks)
 
 def merge(rleObjs, boolfunc=14):
@@ -225,14 +266,13 @@ def crop(rleObjs, np.ndarray[np.uint32_t, ndim=2] bb):
 def pad(rleObjs, np.ndarray[np.uint32_t, ndim=1] paddings):
     cdef RLEs Rs_in = _from_leb128_dicts(rleObjs)
     cdef RLEs Rs_out = RLEs(Rs_in._n)
-    rlePad(Rs_in._R, Rs_out._R, Rs_in._n, <const uint *> paddings.data)
+    rleZeroPad(Rs_in._R, Rs_out._R, Rs_in._n, <const uint *> paddings.data)
     return _to_leb128_dicts(Rs_out)
 
 def complement(rleObjs):
     cdef RLEs Rs = _from_leb128_dicts(rleObjs)
     rleComplementInplace(Rs._R, Rs._n)
     return _to_leb128_dicts(Rs)
-
 
 def iouMulti(rleObjs):
     cdef RLEs Rs = _from_leb128_dicts(rleObjs)

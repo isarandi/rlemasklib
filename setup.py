@@ -1,27 +1,31 @@
 import numpy as np
 from setuptools import setup, Extension
+from Cython.Build import cythonize
 
-# To compile and install locally run "python setup.py build_ext --inplace"
-# To install library to Python site-packages run "python setup.py build_ext install"
+import glob
+
+all_c_files = glob.glob("src/rlemasklib/c/*.c")
+single_translation_unit = 'src/rlemasklib/c/single_translation_unit.c'
+
+use_single_translation_unit = True
+if use_single_translation_unit:
+    c_files = [single_translation_unit]
+else:
+    c_files = [f for f in all_c_files if f != single_translation_unit]
+
 ext_modules = [
     Extension(
         'rlemasklib.rlemasklib_cython',
-        sources=['rlemasklib/rlemasklib_cython.pyx'],
-        include_dirs=[np.get_include(), 'rlemasklib'],
-        extra_compile_args=['-Wno-cpp', '-Wno-unused-function', '-std=c99'],
-    )
+        sources=['src/rlemasklib/rlemasklib_cython.pyx'] + c_files,
+        include_dirs=[np.get_include(), 'src/rlemasklib/c'],
+        extra_compile_args=['-Wno-cpp', '-Wno-unused-function', '-std=c99', '-O3'],
+    ),
+    Extension(
+        'rlemasklib.oop_cython',
+        sources=['src/rlemasklib/oop_cython.pyx'] + c_files,
+        include_dirs=[np.get_include(), 'src/rlemasklib/c'],
+        extra_compile_args=['-Wno-cpp', '-Wno-unused-function', '-std=c99', '-O3'],
+    ),
 ]
 
-setup(
-    name='rlemasklib',
-    version='0.2.0',
-    author='István Sárándi',
-    author_email='istvan.sarandi@uni-tuebingen.de',
-    packages=['rlemasklib'],
-    install_requires=[
-        'setuptools>=18.0',
-        'numpy',
-        'cython>=0.27.3',
-    ],
-    ext_modules=ext_modules
-)
+setup(ext_modules=cythonize(ext_modules))

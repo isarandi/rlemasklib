@@ -3,6 +3,31 @@ requires = [
     "setuptools>=42",
     "wheel",
     "numpy",
-    "cython>=0.27.3"
+    "cython>=3.0.0"
 ]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "rlemasklib"
+version = "0.3.0"
+description = "Manipulate run-length-encoded image masks"
+authors = [
+    { name = "István Sárándi", email = "istvan.sarandi@uni-tuebingen.de" }
+]
+readme = "README.md"
+requires-python = ">=3.8"
+license = { file = "LICENSE" }
+
+dependencies = [
+    "numpy",
+]
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.black]
+line-length = 99
+skip-string-normalization = true
