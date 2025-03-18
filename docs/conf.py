@@ -104,5 +104,6 @@ def autodoc_skip_member(app, what, name, obj, skip, options):
 
 
 def setup(app):
-    app.connect('autoapi-skip-member', autodoc_skip_member)
-    app.connect('autodoc-skip-member', autodoc_skip_member)
+    pass
+    # app.connect('autoapi-skip-member', autodoc_skip_member)
+    # app.connect('autodoc-skip-member', autodoc_skip_member)
