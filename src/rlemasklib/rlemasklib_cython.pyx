@@ -3,7 +3,7 @@
 #**************************************************************************
 # Based on code from the Microsoft COCO Toolbox.      version 2.0
 # Code written by Piotr Dollar and Tsung-Yi Lin, 2015.
-# Modifications by Istvan Sarandi, 2023
+# Modifications by Istvan Sarandi, 2023-2025
 # Licensed under the Simplified BSD License [see coco/license.txt]
 #**************************************************************************
 
@@ -13,14 +13,14 @@ import numpy as np
 cimport numpy as np
 from libc.stdlib cimport malloc, free, calloc
 
-# intialized Numpy. must do.
+# initialize Numpy. must do.
 np.import_array()
 
 _INTERSECTION = 8
 _UNION = 14
 
 # import numpy C function
-# we use PyArray_ENABLEFLAGS to make Numpy ndarray responsible to memoery management
+# we use PyArray_ENABLEFLAGS to make Numpy ndarray responsible to memory management
 cdef extern from "numpy/arrayobject.h":
     void PyArray_ENABLEFLAGS(np.ndarray arr, int flags)
 

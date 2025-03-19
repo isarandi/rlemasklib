@@ -1,3 +1,6 @@
+# cython: language_level=3
+# distutils: language = c
+
 import zlib
 import numpy as np
 cimport numpy as np

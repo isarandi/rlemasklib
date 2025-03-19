@@ -1,8 +1,9 @@
+import contextlib
+import inspect
 import datetime
 import importlib
 import os
 import sys
-from urllib.parse import quote
 
 sys.path.insert(0, os.path.abspath('.'))
 sys.path.insert(0, os.path.abspath('../src'))
@@ -24,7 +25,6 @@ copyright = f'{datetime.datetime.now().year}, {author}'
 add_module_names = False
 python_use_unqualified_type_names = True
 extensions = [
-
     'sphinx.ext.autodoc',
     'sphinx.ext.napoleon',
     'sphinx.ext.autosummary',
@@ -33,7 +33,6 @@ extensions = [
     'sphinx.ext.autodoc.typehints',
     'sphinxcontrib.bibtex',
     'autoapi.extension',
-    'sphinx.ext.viewcode',
     'sphinx.ext.inheritance_diagram',
     'sphinx_codeautolink',
 ]
@@ -49,6 +48,7 @@ intersphinx_mapping = {
 github_username = 'isarandi'
 github_repository = project_slug
 autodoc_show_sourcelink = False
+html_show_sourcelink = False
 
 templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
@@ -58,6 +58,14 @@ html_title = project
 html_theme = 'pydata_sphinx_theme'
 html_theme_options = {
     "show_toc_level": 3,
+    "icon_links": [
+        {
+            "name": "GitHub",
+            "url": f"https://github.com/isarandi/{project_slug}",  # required
+            "icon": "fa-brands fa-square-github",
+            "type": "fontawesome",
+        }
+    ],
 }
 html_static_path = ['_static']
 html_css_files = ['styles/my_theme.css']
@@ -72,7 +80,7 @@ autodoc_default_options = {
     'members': True,
     'inherited-members': True,
     'undoc-members': False,
-    'exclude-members': '__init__, __weakref__, __repr__, __str__'
+    'exclude-members': '__init__, __weakref__, __repr__, __str__',
 }
 autoapi_options = ['members', 'show-inheritance', 'special-members', 'show-module-summary']
 autoapi_add_toctree_entry = True
@@ -84,6 +92,7 @@ autoclass_content = 'class'
 
 autosummary_generate = True
 autosummary_imported_members = False
+
 
 def autodoc_skip_member(app, what, name, obj, skip, options):
     """
@@ -103,21 +112,37 @@ def autodoc_skip_member(app, what, name, obj, skip, options):
 
 
 def linkcode_resolve(domain, info):
+    import rlemasklib
+
     if domain != 'py':
         return None
-    if not info['module']:
-        return None
-    filename = quote(info['module'].replace('.', '/'))
-    if not filename.startswith("tests"):
-        filename = "src/" + filename
-    if "fullname" in info:
-        anchor = info["fullname"]
-        anchor = "#:~:text=" + quote(anchor.split(".")[-1])
-    else:
-        anchor = ""
 
-    result = f'https://github.com/isarandi/{project_slug}/blob/main/{filename}.py{anchor}'
-    return result
+    file, start, end = get_line_numbers(eval(info['fullname']))
+    relpath = os.path.relpath(file, os.path.abspath('..'))
+    return f'https://github.com/isarandi/rlemasklib/blob/main/{relpath}#L{start}-L{end}'
+
+
+def get_line_numbers(obj):
+    if isinstance(obj, property):
+        obj = obj.fget
+    with module_restored(obj):
+        lines = inspect.getsourcelines(obj)
+        file = inspect.getsourcefile(obj)
+
+    start, end = lines[1], lines[1] + len(lines[0]) - 1
+    return file, start, end
+
+
+@contextlib.contextmanager
+def module_restored(obj):
+    if not hasattr(obj, '_module_original_'):
+        yield
+    else:
+        fake_module = obj.__module__
+        obj.__module__ = obj._module_original_
+        yield
+        obj.__module__ = fake_module
+
 
 def setup(app):
     app.connect('autoapi-skip-member', autodoc_skip_member)

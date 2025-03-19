@@ -147,7 +147,7 @@ The mask can be flipped, rotated, and transposed without decoding the RLE repres
 
 
 Connected Components and Filtering
-
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
 .. code-block:: python

@@ -94,6 +94,8 @@ from rlemasklib.rlemasklib import (
     merge,
 )
 
-# set the __module__ attribute of all functions to this module
+# set the __module__ attribute of all functions/classes to this module
 for x in __all__:
-    globals()[x].__module__ = __name__
+    obj = globals()[x]
+    obj._module_original_ = obj.__module__
+    obj.__module__ = __name__

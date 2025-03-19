@@ -133,8 +133,8 @@ class RLEMask:
             imsize: [width, height] of the desired mask (either this or imshape must be provided)
 
         Returns:
-            An RLEMask object where the area of the provided bounding box has the value 1, and the
-                rest is 0.
+            An RLEMask object where the area of the provided bounding box has the value 1, and \
+                the rest is 0.
         """
         result = RLEMask._init()
         result.cy._i_from_bbox(bbox, imshape=_get_imshape(imshape, imsize))
@@ -151,7 +151,7 @@ class RLEMask:
             imsize: [width, height] of the desired mask (either this or imshape must be provided)
 
         Returns:
-            An RLEMask object where the area of the provided circle has the value 1, and the
+            An RLEMask object where the area of the provided circle has the value 1, and the \
                 rest is 0.
         """
         result = RLEMask._init()
@@ -213,7 +213,7 @@ class RLEMask:
                 (e.g., RLEMask, NumPy array)
 
         Returns:
-            A new RLEMask object representing a mask of ones with the same shape as the input
+            A new RLEMask object representing a mask of ones with the same shape as the input \
                 mask.
         """
         return RLEMask.ones(mask.shape)
@@ -289,7 +289,7 @@ class RLEMask:
         """The number of pixels along the contour of the mask.
 
         See Also:
-            :meth:`contour`
+            :meth:`contours`
         """
         return self.cy._r_contours().area()
 
@@ -384,7 +384,7 @@ class RLEMask:
 
         Args:
             key: a tuple of two slices, one for height and one for width
-            value: either a constant (0 or 1) or another RLE or a numpy mask with the same size
+            value: either a constant (0 or 1) or another RLEMask or a numpy mask with the same size
                 as the submask
 
         Examples:
@@ -486,10 +486,10 @@ class RLEMask:
         return RLEMask._init(self.cy._r_boolfunc(other.cy, BoolFunc.OR.value))
 
     def __ior__(self, other: "RLEMask") -> "RLEMask":
-        """Compute the union with another RLE mask in place.
+        """Compute the union with another RLEMask in place.
 
         Args:
-            other: the other RLE mask
+            other: the other RLEMask
 
         Returns:
             Self
@@ -507,10 +507,10 @@ class RLEMask:
         return self
 
     def __and__(self, other: "RLEMask") -> "RLEMask":
-        """Compute the intersection of two RLE masks.
+        """Compute the intersection of two RLEMasks.
 
         Args:
-            other: another RLE mask
+            other: another RLEMask
 
         Returns:
             A new RLEMask object representing the intersection of the two masks.
@@ -530,10 +530,10 @@ class RLEMask:
         return RLEMask._init(self.cy._r_boolfunc(other.cy, BoolFunc.AND.value))
 
     def __iand__(self, other: "RLEMask") -> "RLEMask":
-        """Compute the intersection with another RLE mask in place.
+        """Compute the intersection with another RLEMask in place.
 
         Args:
-            other: the other RLE mask
+            other: the other RLEMask
 
         Returns:
             Self
@@ -551,10 +551,10 @@ class RLEMask:
         return self
 
     def __xor__(self, other: "RLEMask") -> "RLEMask":
-        """Compute the symmetric difference of two RLE masks.
+        """Compute the symmetric difference of two RLEMasks.
 
         Args:
-            other: another RLE mask
+            other: another RLEMask
 
         Returns:
             A new RLEMask object representing the symmetric difference of the two masks.
@@ -571,10 +571,10 @@ class RLEMask:
         return RLEMask._init(self.cy._r_boolfunc(other.cy, BoolFunc.XOR.value))
 
     def __ixor__(self, other: "RLEMask") -> "RLEMask":
-        """Compute the symmetric difference with another RLE mask in place.
+        """Compute the symmetric difference with another RLEMasks in place.
 
         Args:
-            other: the other RLE mask
+            other: the other RLEMask
 
         Returns:
             Self
@@ -592,7 +592,7 @@ class RLEMask:
         return self
 
     def __sub__(self, other: "RLEMask") -> "RLEMask":
-        """Compute the difference of two RLE masks.
+        """Compute the difference of two RLEMasks.
 
         Args:
             other: another RLE mask
@@ -612,10 +612,10 @@ class RLEMask:
         return RLEMask._init(self.cy._r_boolfunc(other.cy, BoolFunc.DIFFERENCE.value))
 
     def __isub__(self, other: "RLEMask") -> "RLEMask":
-        """Compute the difference with another RLE mask in place.
+        """Compute the difference with another RLEMask in place.
 
         Args:
-            other: the other RLE mask
+            other: the other RLEMask
 
         Returns:
             Self
@@ -633,7 +633,7 @@ class RLEMask:
         return self
 
     def __eq__(self, other):
-        """Check if two RLE masks are equal (same runlengths and shape).
+        """Check if two RLEMasks are equal (same runlengths and shape).
 
         Returns:
             True if the masks are equal, False otherwise.
@@ -645,11 +645,11 @@ class RLEMask:
             return False
 
     def __repr__(self):
-        """A string representation of the RLE mask, containing the shape and the runlengths."""
+        """A string representation of the RLEMask, containing the shape and the runlengths."""
         return f"RLEMask(shape={self.shape}, counts={repr(self.cy._counts_view().tolist())})"
 
     def __array__(self, dtype=None, copy=None):
-        """Convert the RLE mask to a dense numpy array, used by numpy functions.
+        """Convert the RLEMask to a dense numpy array, used by numpy functions.
 
         Returns:
             A numpy array of type uint8 representing the mask with 0 and 1 values.
@@ -1289,7 +1289,7 @@ class RLEMask:
             A new RLEMask object representing the intersection of the masks.
 
         See Also:
-            :meth:`__and__`, which provides the intersection as the `&` operator.
+            :meth:`__and__`, which provides the intersection as the ``&`` operator.
             :meth:`merge_many`, which allows merging with different binary Boolean functions.
             :meth:`merge_many_custom`, which allows merging with custom n-ary Boolean functions.
         """
@@ -1306,7 +1306,7 @@ class RLEMask:
             A new RLEMask object representing the union of the masks.
 
         See Also:
-            :meth:`__or__`, which provides the union as the `|` operator.
+            :meth:`__or__`, which provides the union as the ``|`` operator.
         """
         return RLEMask.merge_many(masks, BoolFunc.OR)
 
@@ -1464,7 +1464,9 @@ class RLEMask:
         return RLECy.merge_to_label_map([r.cy for r in rles])
 
     def repeat(self, num_h: int, num_w: int, inplace: bool = False) -> "RLEMask":
-        """Repeat the mask pixels multiple times along the axes, analogous to np.repeat (and not like np.tile).
+        """Repeat the mask pixels multiple times along the axes.
+
+        This method is analogous to :func:`np.repeat <numpy.repeat>` (not :func:`np.tile <numpy.tile>`).
 
         This repeats each pixel in the mask `num_h` times along the vertical axis and `num_w` times
         along the horizontal axis.
@@ -1778,7 +1780,7 @@ class RLEMask:
         return RLEMask._init(RLECy.concat_vertical([m.cy for m in masks]))
 
     def tile(self, num_h: int, num_w: int) -> "RLEMask":
-        """Tile the mask multiple times along the axes, analogous to np.tile.
+        """Tile the mask multiple times along the axes, analogous to :func:`np.tile <numpy.tile>`.
 
         This repeats the mask `num_h` times along the vertical axis and `num_w` times along the
         horizontal axis.
@@ -1816,7 +1818,7 @@ class RLEMask:
             inplace: whether to perform the operation in place or to return a new object
 
         Returns:
-            A new RLEMask object with the rectangle filled.
+            An RLEMask object with the rectangle filled (self if inplace=True)
 
         See Also:
             :meth:`fill_circle`
@@ -1836,7 +1838,7 @@ class RLEMask:
             inplace: whether to perform the operation in place or to return a new object
 
         Returns:
-            A new RLEMask object with the circle filled.
+            An RLEMask object with the circle filled (self if inplace=True)
 
         See Also:
             :meth:`fill_rectangle`
