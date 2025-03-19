@@ -26,10 +26,8 @@ This library originates as a fork of the [COCO API](https://github.com/cocodatas
 
 ## Installation
 
-The library can be installed with pip from GitHub:
-
 ```bash
-pip install git+https://github.com/isarandi/rlemasklib.git
+pip install rlemasklib
 ```
 
 ## Documentation
