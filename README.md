@@ -24,7 +24,7 @@ The library provides many operations on masks, including:
 This library originates as a fork of the [COCO API](https://github.com/cocodataset/cocoapi)'s `pycocotools.mask` module (which was originally written by Piotr Dollár and Tsung-Yi Lin) but now mostly consists of new code.
 
 
-# Installation
+## Installation
 
 The library can be installed with pip from GitHub:
 
@@ -32,6 +32,6 @@ The library can be installed with pip from GitHub:
 pip install git+https://github.com/isarandi/rlemasklib.git
 ```
 
-# Documentation
+## Documentation
 
 The documentation can be found at [https://istvansarandi.com/docs/rlemasklib/](https://istvansarandi.com/docs/rlemasklib/).
