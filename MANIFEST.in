@@ -1,0 +1,2 @@
+include src/rlemasklib/c/*.h
+include src/rlemasklib/c/*.c

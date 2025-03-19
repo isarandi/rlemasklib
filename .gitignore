@@ -160,3 +160,4 @@ cython_debug/
 #.idea/
 
 src/rlemasklib/rlemasklib_cython.c
+src/rlemasklib/oop_cython.c

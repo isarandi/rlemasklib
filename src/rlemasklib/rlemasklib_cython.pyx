@@ -135,8 +135,8 @@ cdef class Masks:
     # the memory management of _mask has been passed to np.ndarray
     # it doesn't need to be freed here
 
-    # called when passing into np.array() and return an np.ndarray in column-major order
-    def __array__(self):
+    # return an np.ndarray in column-major order
+    def to_array(self):
         cdef np.npy_intp shape[1]
         shape[0] = <np.npy_intp> self._h * self._w * self._n
         # Create a 1D array, and reshape it to fortran/Matlab column-major array
@@ -225,7 +225,7 @@ def decode(rleObjs):
     cdef bool success = rleDecode(<RLE *> Rs._R, masks._mask, n, 1)
     if not success:
         raise ValueError('Invalid RLE: Run-lengths do not match the mask size')
-    return np.array(masks)
+    return masks.to_array()
 
 def _from_uncompressed_dicts(rleObjs):
     cdef siz n = len(rleObjs)
@@ -259,7 +259,7 @@ def decodeUncompressed(ucRles):
     cdef bool success = rleDecode(<RLE *> Rs._R, masks._mask, n, 1)
     if not success:
         raise ValueError('Invalid RLE: Run-lengths do not match the mask size')
-    return np.array(masks)
+    return masks.to_array()
 
 def merge(rleObjs, boolfunc=14):
     cdef RLEs Rs = _from_leb128_dicts(rleObjs)
