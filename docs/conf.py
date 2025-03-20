@@ -6,8 +6,11 @@ import os
 import sys
 from enum import Enum
 
-sys.path.insert(0, os.path.abspath('.'))
-sys.path.insert(0, os.path.abspath('../src'))
+#sys.path.insert(0, os.path.abspath('.'))
+#sys.path.insert(0, os.path.abspath('../src'))
+
+sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
 
 
 from conf_spec import project, project_slug, release
