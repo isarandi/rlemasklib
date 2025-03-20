@@ -127,9 +127,8 @@ def linkcode_resolve(domain, info):
         return None
 
     file, start, end = get_line_numbers(eval(info['fullname']))
-
-    relpath = os.path.relpath(file, os.path.abspath('..'))
-    return f'https://github.com/isarandi/rlemasklib/blob/main/{relpath}#L{start}-L{end}'
+    relpath = os.path.relpath(file, os.path.dirname(rlemasklib.__file__))
+    return f'https://github.com/isarandi/rlemasklib/blob/main/src/{relpath}#L{start}-L{end}'
 
 
 # def get_line_numbers(obj):
