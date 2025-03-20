@@ -27,6 +27,12 @@ class RLEMask:
         obj: the input object to create the mask from. It can be a dense 2D array, a dictionary, or
             a list/1D-array of run-length counts.
         shape: [height, width] of the mask, in case the input is a list of run-length counts.
+
+    Raises:
+        ValueError: if the input is not a dense 2D array, a dictionary, or a sequence of run-length
+            counts.
+        ValueError: if the sum of the counts is not equal to height * width when counts are given.
+        ValueError: if the shape is not provided when counts are given.
     """
 
     __slots__ = ['cy']
@@ -66,6 +72,10 @@ class RLEMask:
             shape: [height, width] of the mask
             order: the order of the counts in the list, either 'F' or 'C' for Fortran
                 (column major) or C (row major) order
+
+        Raises:
+            ValueError: if the sum of the counts is not equal to height * width.
+            ValueError: if the order is not 'F' or 'C'.
         """
         counts = np.ascontiguousarray(counts, dtype=np.uint32)
         if validate_sum and np.sum(counts) != shape[0] * shape[1]:
@@ -319,15 +329,18 @@ class RLEMask:
         return self.cy.nonzero_indices()
 
     def __getitem__(
-        self, key: Union[tuple[slice, slice], tuple[int, int]]
+        self, key: Union[slice, tuple[slice, slice], tuple[int, int]]
     ) -> Union[int, "RLEMask"]:
         """Crop the RLE mask to get a submask, by slicing, or retrieve a single pixel value.
 
         Args:
-            key: a tuple of two slices or two ints, one for height and one for width
+            key: a slice, a tuple of two slices or two ints (one for height and one for width)
 
         Returns:
             A new RLEMask object representing the submask.
+
+        Raises:
+            ValueError: if the key is not a tuple of two slices or two integers.
 
         Examples:
             With slices:
@@ -398,11 +411,14 @@ class RLEMask:
 
         """
 
-        if isinstance(key, tuple) and len(key) == 2:
+        if isinstance(key, tuple) and len(key) == 2 or isinstance(key, slice):
             if isinstance(value, np.ndarray):
                 value = RLEMask.from_array(value)
 
             h, w = self.shape
+
+            if isinstance(key, slice):
+                key = (key, slice(None))
 
             if isinstance(key[0], slice) and isinstance(key[1], slice):
                 # substitute negative indices and None:
@@ -443,7 +459,7 @@ class RLEMask:
                     raise ValueError("Value must be an integer when indexing with integers")
                 self.cy._i_set_int_index(key[0], key[1], value)
         else:
-            raise ValueError("Only 2D indexing is supported")
+            raise ValueError("Only 2D indexing is supported with integer indices")
 
     def __invert__(self) -> "RLEMask":
         """Compute the complement of an RLE mask.
@@ -497,7 +513,8 @@ class RLEMask:
         Examples:
             >>> rle1 = RLEMask(np.eye(3))
             >>> rle2 = RLEMask(np.eye(3, k=-1))
-            >>> np.array(rle1 | rle2)
+            >>> rle1 |= rle2
+            >>> np.array(rle1)
             array([[1, 1, 1],
                    [1, 1, 1],
                    [1, 1, 1]], dtype=uint8)
@@ -541,7 +558,8 @@ class RLEMask:
         Examples:
             >>> rle1 = RLEMask(np.eye(3))
             >>> rle2 = RLEMask(np.eye(3)[::-1])
-            >>> np.array(rle1 & rle2)
+            >>> rle1 &= rle2
+            >>> np.array(rle1)
             array([[0, 0, 0],
                    [0, 1, 0],
                    [0, 0, 0]], dtype=uint8)
@@ -582,7 +600,8 @@ class RLEMask:
         Examples:
             >>> rle1 = RLEMask(np.eye(3))
             >>> rle2 = RLEMask(np.eye(3)[::-1])
-            >>> np.array(rle1 ^ rle2)
+            >>> rle1 ^= rle2
+            >>> np.array(rle1)
             array([[1, 0, 1],
                    [0, 1, 0],
                    [1, 0, 1]], dtype=uint8)
@@ -623,7 +642,8 @@ class RLEMask:
         Examples:
             >>> rle1 = RLEMask(np.eye(3))
             >>> rle2 = RLEMask(np.eye(3)[::-1])
-            >>> np.array(rle1 - rle2)
+            >>> rle1 -= rle2
+            >>> np.array(rle1)
             array([[1, 0, 0],
                    [0, 0, 0],
                    [0, 0, 1]], dtype=uint8)
@@ -656,6 +676,7 @@ class RLEMask:
 
         See Also:
             :meth:`to_array`
+
         """
         if copy is False:
             raise ValueError("RLEMask cannot be viewed as a numpy array without copying")
@@ -702,7 +723,8 @@ class RLEMask:
 
         Args:
             masks: a list of RLEMask objects
-            threshold: the threshold for merging
+            threshold: the minimum number of masks that must have a pixel set for it to be set
+                in the result
 
         Returns:
             A new RLEMask object representing the merged mask.
@@ -1276,7 +1298,7 @@ class RLEMask:
             :meth:`merge_many`, which allows merging with different binary Boolean functions.
         """
         self._raise_if_different_shape(other)
-        return RLEMask._init(self.cy._r_boolfunc(other.cy, func.value))
+        return RLEMask._init(self.cy._r_boolfunc(other.cy, func & 0xffff))
 
     @staticmethod
     def intersection(masks: Sequence["RLEMask"]) -> "RLEMask":
@@ -1356,8 +1378,7 @@ class RLEMask:
         #         return masks[0].copy()
         #     diffs = RLEMask._init(RLECy.merge_many_or([m.cy for m in masks[1:]]))
         #     return masks[0] - diffs
-
-        func = [func] * (len(masks) - 1)
+        # func = [func] * (len(masks) - 1)
 
         return RLEMask._init(
             RLECy.merge_many_multifunc([m.cy for m in masks], [f.value for f in func])
@@ -1409,11 +1430,11 @@ class RLEMask:
             >>> mergefun = RLEMask.make_merge_function(lambda a, b, c: (a | b) & ~c)
             >>> rle1 = RLEMask(np.eye(3))
             >>> rle2 = RLEMask(np.eye(3)[::-1])
-            >>> rle3 = RLEMask(np.eye(3, k=-1))
+            >>> rle3 = RLEMask(np.eye(3, k=-2))
             >>> rle = mergefun(rle1, rle2, rle3)
             >>> np.array(rle)
-            array([[1, 0, 0],
-                   [0, 0, 0],
+            array([[1, 0, 1],
+                   [0, 1, 0],
                    [0, 0, 1]], dtype=uint8)
 
         See Also:
@@ -1480,7 +1501,7 @@ class RLEMask:
             An RLEMask object representing the repeated mask (self if inplace=True)
 
         See Also:
-            :meth:`tile`
+            Not to be confused with :meth:`tile`
         """
         if inplace:
             self.cy._i_repeat(num_h, num_w)
@@ -1727,6 +1748,11 @@ class RLEMask:
         Returns:
             A new RLEMask object representing the concatenated masks.
 
+        Raises:
+            ValueError: if the masks have different shapes along the axis
+            ValueError: if the iterable is empty
+            ValueError: if the axis is not 0 or 1
+
         See Also:
             :meth:`hconcat`, :meth:`vconcat`
         """
@@ -1746,6 +1772,10 @@ class RLEMask:
 
         Returns:
             A new RLEMask object representing the horizontally concatenated masks.
+
+        Raises:
+            ValueError: if the masks have different heights
+            ValueError: if the iterable is empty
 
         See Also:
             :meth:`vconcat`, :meth:`concatenate`
@@ -1767,6 +1797,10 @@ class RLEMask:
 
         Returns:
             A new RLEMask object representing the vertically concatenated masks.
+
+        Raises:
+            ValueError: if the masks have different widths
+            ValueError: if the iterable is empty
 
         See Also:
             :meth:`hconcat`, :meth:`concatenate`
@@ -1793,7 +1827,7 @@ class RLEMask:
             A new RLEMask object representing the tiled mask.
 
         See Also:
-            :meth:`repeat`
+            Not to be confused with :meth:`repeat`
         """
 
         if num_h == 0 or num_w == 0:

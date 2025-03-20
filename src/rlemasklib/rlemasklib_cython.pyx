@@ -264,7 +264,7 @@ def decodeUncompressed(ucRles):
 def merge(rleObjs, boolfunc=14):
     cdef RLEs Rs = _from_leb128_dicts(rleObjs)
     cdef RLEs R = RLEs(1)
-    rleMerge(<RLE *> Rs._R, <RLE *> R._R, <siz> Rs._n, boolfunc)
+    rleMerge(<RLE *> Rs._R, <RLE *> R._R, <siz> Rs._n, boolfunc & 0xffff)
     return _to_leb128_dicts(R)[0]
 
 def area(rleObjs):

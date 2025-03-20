@@ -1,3 +1,3 @@
 project = 'RLEMaskLib'
 project_slug = 'rlemasklib'
-release = 'v0.3.3'
+release = 'v0.3.4'

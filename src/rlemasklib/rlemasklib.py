@@ -417,7 +417,7 @@ def merge(masks, boolfunc: BoolFunc):
     Returns:
         An RLE mask dictionary of the merged masks.
     """
-    return rlemasklib_cython.merge(masks, boolfunc.value)
+    return rlemasklib_cython.merge(masks, boolfunc)
 
 
 def _compress(uncompressed_rle):

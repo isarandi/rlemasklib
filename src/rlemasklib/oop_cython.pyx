@@ -441,7 +441,7 @@ cdef class RLECy:
         cdef int boolfunc
 
         for rle, boolfunc in zip(rles[1:], boolfuncs):
-            rleMerge2(&tmp.r, &rle.r, &result.r, boolfunc)
+            rleMerge2(&tmp.r, &rle.r, &result.r, boolfunc & 0xffffffff)
             tmp, result = result, tmp
         return result
 
@@ -653,7 +653,7 @@ cdef class RLECy:
 
     def _r_boolfunc(self, other: RLECy, boolfunc: int):
         cdef RLECy result = RLECy()
-        rleMerge2(&self.r, &other.r, &result.r, boolfunc)
+        rleMerge2(&self.r, &other.r, &result.r, boolfunc & 0xffffffff)
         return result
 
     @property

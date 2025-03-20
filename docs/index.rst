@@ -7,12 +7,13 @@ RLEMaskLib is fully compatible with the COCO mask format (in the form of diction
 
 The library provides many operations on masks, including:
 
-- Set operations (complement, difference, symmetric difference) and custom boolean functions.
+- Set operations (and, or, xor, complement, difference) and custom boolean functions.
 - Crop, pad, tile, concatenate
 - Connected components extraction
 - Warp (affine, perspective, lens distortion)
 - Transpose, flip, rotate by multiples of 90 degrees
 - Binary morphology: dilate, erode, open, close
+- Determine the bounding box and the largest internal rectangle
 - Convolve with arbitrary kernels
 - Directly create fully foreground and fully background masks
 - Decompress of COCO's compressed RLE format to integer run-lengths, and vice versa
@@ -94,7 +95,7 @@ Boolean Operations on Masks
 
 
 Slicing
-~~~~~~~~~~~~
+~~~~~~~
 
 To extract a subregion of the mask, you can use NumPy-style slicing:
 
@@ -201,9 +202,9 @@ Examples of the functional API and the equivalent object-oriented API are shown 
         [0, 0, 1]
     ])
 
-    rle_dict1 = rlemasklib.encode(mask)  # functional API: array to dict directly)
+    rle_dict1 = rlemasklib.encode(mask1)  # functional API: array to dict directly)
     rle1 = RLEMask.from_dict(rle_dict1)  # OOP: dict to RLEMask
-    rle2 = RLEMask.from_array(mask)  # OOP: array to RLEMask
+    rle2 = RLEMask.from_array(mask2)  # OOP: array to RLEMask
     rle_dict2 = rle2.to_dict()  # OOP: RLEMask to dict
     intersection_dict = rlemasklib.intersection([rle_dict1, rle_dict2])
     intersection_rle = RLEMask.intersection([rle1, rle2])

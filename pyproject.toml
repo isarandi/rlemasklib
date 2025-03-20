@@ -9,7 +9,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rlemasklib"
-version = "0.3.3"
+version = "0.3.4"
 description = "Manipulate run-length-encoded image masks"
 authors = [
     { name = "István Sárándi", email = "istvan.sarandi@uni-tuebingen.de" }

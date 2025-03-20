@@ -59,9 +59,9 @@ body {
   max-width: 100%;  /* default is 60em */
 }
 
-.bd-sidebar-primary {
+/*.bd-sidebar-primary {
     max-width: 20%;
-}
+}*/
 
 /* Ensure links in code blocks are underlined */
 .highlight a {
