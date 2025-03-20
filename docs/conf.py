@@ -112,10 +112,11 @@ def autodoc_skip_member(app, what, name, obj, skip, options):
         module_name = '.'.join(name.split('.')[:-1])
 
         try:
+            import rlemasklib
             module = importlib.import_module(module_name)
             return not getattr(module, '__doc__', None)
-        except ModuleNotFoundError:
-            print('module not found', module_name)
+        except ModuleNotFoundError as e:
+            print('module not found', module_name, str(e))
             return None
 
 
