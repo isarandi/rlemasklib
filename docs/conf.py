@@ -104,14 +104,18 @@ def autodoc_skip_member(app, what, name, obj, skip, options):
     """
     # Check if the object has a __doc__ attribute
     if not getattr(obj, 'docstring', None):
+        print('no docstring', name)
         return True  # Skip if there's no docstring
     elif what in ('class', 'function', 'attribute'):
         # Check if the module of the class has a docstring
+        print('checking module', name)
         module_name = '.'.join(name.split('.')[:-1])
+
         try:
             module = importlib.import_module(module_name)
             return not getattr(module, '__doc__', None)
         except ModuleNotFoundError:
+            print('module not found', module_name)
             return None
 
 
@@ -177,6 +181,5 @@ def module_restored(obj):
 
 
 def setup(app):
-    pass
-    #app.connect('autoapi-skip-member', autodoc_skip_member)
-    #app.connect('autodoc-skip-member', autodoc_skip_member)
+    app.connect('autoapi-skip-member', autodoc_skip_member)
+    app.connect('autodoc-skip-member', autodoc_skip_member)
