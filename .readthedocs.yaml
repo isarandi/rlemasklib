@@ -9,6 +9,8 @@ build:
   os: ubuntu-24.04
   tools:
     python: "3.10"
+  commands:
+    - sphinx-build -E -b html docs _build/html
 
 # Build documentation in the "docs/" directory with Sphinx
 sphinx:

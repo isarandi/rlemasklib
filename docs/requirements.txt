@@ -5,6 +5,7 @@ sphinx-autobuild
 sphinx-autodoc-typehints
 sphinxcontrib-prettyspecialmethods
 sphinx-autodoc-napoleon-typehints
+sphinx-codeautolink
 sphinx-rtd-theme
 pydata-sphinx-theme
 sphinxcontrib-napoleon
