@@ -1,16 +1,16 @@
 [build-system]
 requires = [
-    "setuptools>=42",
+    "setuptools>=61",
     "wheel",
     "numpy",
     "cython>=3.0.0",
-    "setuptools_scm"
+    "setuptools_scm[toml]"
 ]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "RLEMaskLib"
-version = "0.0.0"  # required placeholder when using dynamic versioning
+version = "0.0.0"  # required dummy value; overridden by setuptools_scm
 description = "Manipulate run-length-encoded image masks"
 authors = [
     { name = "István Sárándi", email = "istvan.sarandi@uni-tuebingen.de" }
@@ -63,9 +63,7 @@ Author = "https://istvansarandi.com"
 [tool.setuptools_scm]
 version_scheme = "guess-next-dev"
 local_scheme = "no-local-version"
-
-[tool.setuptools.dynamic]
-version = { use_scm = true }
+# optional: write_to = "src/rlemasklib/_version.py"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
