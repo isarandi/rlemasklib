@@ -1,31 +1,46 @@
 import contextlib
-import inspect
-import datetime
 import importlib
+import inspect
 import os
+import re
 import sys
 from enum import Enum
 
-#sys.path.insert(0, os.path.abspath('.'))
-#sys.path.insert(0, os.path.abspath('../src'))
+import setuptools_scm
+import toml
 
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
-#sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
 
 
-from conf_spec import project, project_slug, release
+pyproject_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "pyproject.toml"))
 
-release = release
+with open(pyproject_path) as f:
+    data = toml.load(f)
+
+project_info = data["project"]
+project_slug = project_info["name"].replace(" ", "-").lower()
+tool_urls = project_info.get("urls", {})
+
+repo_url = tool_urls.get("Repository", "")
+author_url = tool_urls.get("Author", "")
+github_username = re.match(r"https://github\.com/([^/]+)/?", repo_url)[1]
+
+project = project_info["name"]
+release = setuptools_scm.get_version('..')
+version = ".".join(release.split(".")[:2])
+main_module_name = project_slug.replace('-', '_')
+repo_name = project_slug
+module = importlib.import_module(main_module_name)
+globals()[main_module_name] = module
+
 
 # -- Project information -----------------------------------------------------
-linkcode_url = f'https://github.com/isarandi/{project_slug}'
+linkcode_url = repo_url
 
-author = 'István Sárándi'
-copyright = f'{datetime.datetime.now().year}, {author}'
+author = project_info["authors"][0]["name"]
+copyright = f'2023-%Y'
 
 # -- General configuration ---------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
-
 add_module_names = False
 python_use_unqualified_type_names = True
 extensions = [
@@ -49,8 +64,8 @@ intersphinx_mapping = {
     'scipy': ('https://docs.scipy.org/doc/scipy/', None),
 }
 
-github_username = 'isarandi'
-github_repository = project_slug
+github_username = github_username
+github_repository = repo_name
 autodoc_show_sourcelink = False
 html_show_sourcelink = False
 
@@ -65,14 +80,21 @@ html_theme_options = {
     "icon_links": [
         {
             "name": "GitHub",
-            "url": f"https://github.com/isarandi/{project_slug}",  # required
+            "url": repo_url,
             "icon": "fa-brands fa-square-github",
             "type": "fontawesome",
         }
     ],
+    # "footer_items": ["copyright"],
 }
 html_static_path = ['_static']
 html_css_files = ['styles/my_theme.css']
+
+html_context = {
+    "author_url": author_url,
+    "author": author,
+}
+
 toc_object_entries_show_parents = "hide"
 
 autoapi_root = 'api'
@@ -112,7 +134,6 @@ def autodoc_skip_member(app, what, name, obj, skip, options):
         module_name = '.'.join(name.split('.')[:-1])
 
         try:
-            import rlemasklib
             module = importlib.import_module(module_name)
             return not getattr(module, '__doc__', None)
         except ModuleNotFoundError as e:
@@ -121,26 +142,13 @@ def autodoc_skip_member(app, what, name, obj, skip, options):
 
 
 def linkcode_resolve(domain, info):
-    import rlemasklib
-
     if domain != 'py':
         return None
 
     file, start, end = get_line_numbers(eval(info['fullname']))
-    relpath = os.path.relpath(file, os.path.dirname(rlemasklib.__file__))
-    return f'https://github.com/isarandi/rlemasklib/blob/main/src/rlemasklib/{relpath}#L{start}-L{end}'
+    relpath = os.path.relpath(file, os.path.dirname(module.__file__))
+    return f'{repo_url}/blob/v{release}/src/{main_module_name}/{relpath}#L{start}-L{end}'
 
-
-# def get_line_numbers(obj):
-#     if isinstance(obj, property):
-#         obj = obj.fget
-#     with module_restored(obj):
-#         lines = inspect.getsourcelines(obj)
-#         file = inspect.getsourcefile(obj)
-#
-#     start, end = lines[1], lines[1] + len(lines[0]) - 1
-#     return file, start, end
-#
 
 def get_line_numbers(obj):
     if isinstance(obj, property):

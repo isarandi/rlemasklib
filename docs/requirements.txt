@@ -11,3 +11,5 @@ pydata-sphinx-theme
 sphinxcontrib-napoleon
 Cython
 numpy
+setuptools-scm
+toml

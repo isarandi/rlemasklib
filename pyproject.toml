@@ -3,17 +3,59 @@ requires = [
     "setuptools>=42",
     "wheel",
     "numpy",
-    "cython>=3.0.0"
+    "cython>=3.0.0",
+    "setuptools_scm"
 ]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "rlemasklib"
-version = "0.3.4"
+name = "RLEMaskLib"
 description = "Manipulate run-length-encoded image masks"
 authors = [
     { name = "István Sárándi", email = "istvan.sarandi@uni-tuebingen.de" }
 ]
+
+[tool.setuptools_scm]
+version_scheme = "guess-next-dev"
+local_scheme = "no-local-version"
+
+keywords = [
+    "computer-vision",
+    "cython",
+    "image-processing",
+    "segmentation",
+    "run-length-encoding",
+    "rle",
+    "image-segmentation",
+    "mask",
+    "compression-algorithm",
+    "image-mask",
+    "runlengthencoding",
+    "run-length",
+    "image-masking"
+]
+
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Image Processing",
+    "Topic :: Software Development :: Libraries",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python",
+    "Programming Language :: C",
+    "Programming Language :: Cython",
+    "Operating System :: GNU/Linux",
+]
+
+[project.urls]
+Homepage = "https://github.com/isarandi/rlemasklib"
+Repository = "https://github.com/isarandi/rlemasklib"
+Documentation = "https://rlemasklib.readthedocs.io/"
+Issues = "https://github.com/isarandi/rlemasklib/issues"
+Changelog = "https://github.com/isarandi/rlemasklib/releases"
+Author = "https://istvansarandi.com"
+
 readme = "README.md"
 requires-python = ">=3.8"
 license = { file = "LICENSE" }

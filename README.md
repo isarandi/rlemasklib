@@ -1,6 +1,5 @@
 # RLEMaskLib: Run-Length Encoded Mask Operations
 
-
 This library provides efficient run-length encoded (RLE) operations for binary masks in Python. It is designed to be fast and memory efficient, and is particularly useful for working with large datasets. The library provides an intuitive and extensive object-oriented interface as well as a simpler functional one. To achieve high efficiency, the core functionality is implemented in C, and wrapped via Cython.
 
 RLEMaskLib is fully compatible with the COCO mask format (in the form of dictionaries) but can also work directly with runlength sequences.
@@ -32,4 +31,4 @@ pip install rlemasklib
 
 ## Documentation
 
-The documentation can be found at [https://istvansarandi.com/docs/rlemasklib/](https://istvansarandi.com/docs/rlemasklib/).
+See [https://rlemasklib.readthedocs.io/](https://rlemasklib.readthedocs.io/).
