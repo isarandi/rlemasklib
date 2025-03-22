@@ -45,7 +45,7 @@ classifiers = [
     "Programming Language :: Python",
     "Programming Language :: C",
     "Programming Language :: Cython",
-    "Operating System :: GNU/Linux"
+    "Operating System :: POSIX :: Linux"
 ]
 
 dependencies = [
