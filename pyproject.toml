@@ -10,6 +10,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "RLEMaskLib"
+version = "0.0.0"  # required placeholder when using dynamic versioning
 description = "Manipulate run-length-encoded image masks"
 authors = [
     { name = "István Sárándi", email = "istvan.sarandi@uni-tuebingen.de" }
@@ -44,11 +45,11 @@ classifiers = [
     "Programming Language :: Python",
     "Programming Language :: C",
     "Programming Language :: Cython",
-    "Operating System :: GNU/Linux",
+    "Operating System :: GNU/Linux"
 ]
 
 dependencies = [
-    "numpy",
+    "numpy"
 ]
 
 [project.urls]
@@ -62,6 +63,9 @@ Author = "https://istvansarandi.com"
 [tool.setuptools_scm]
 version_scheme = "guess-next-dev"
 local_scheme = "no-local-version"
+
+[tool.setuptools.dynamic]
+version = { use_scm = true }
 
 [tool.setuptools]
 package-dir = { "" = "src" }
