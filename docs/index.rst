@@ -27,8 +27,6 @@ This library originates as a fork of the COCO API's :footcite:`lin2014coco`. `py
 Installation
 ------------
 
-The library can be installed with pip:
-
 .. code-block:: bash
 
     pip install rlemasklib

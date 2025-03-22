@@ -14,10 +14,9 @@ description = "Manipulate run-length-encoded image masks"
 authors = [
     { name = "István Sárándi", email = "istvan.sarandi@uni-tuebingen.de" }
 ]
-
-[tool.setuptools_scm]
-version_scheme = "guess-next-dev"
-local_scheme = "no-local-version"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { file = "LICENSE" }
 
 keywords = [
     "computer-vision",
@@ -48,6 +47,10 @@ classifiers = [
     "Operating System :: GNU/Linux",
 ]
 
+dependencies = [
+    "numpy",
+]
+
 [project.urls]
 Homepage = "https://github.com/isarandi/rlemasklib"
 Repository = "https://github.com/isarandi/rlemasklib"
@@ -56,13 +59,9 @@ Issues = "https://github.com/isarandi/rlemasklib/issues"
 Changelog = "https://github.com/isarandi/rlemasklib/releases"
 Author = "https://istvansarandi.com"
 
-readme = "README.md"
-requires-python = ">=3.8"
-license = { file = "LICENSE" }
-
-dependencies = [
-    "numpy",
-]
+[tool.setuptools_scm]
+version_scheme = "guess-next-dev"
+local_scheme = "no-local-version"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
