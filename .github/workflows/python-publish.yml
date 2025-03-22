@@ -28,14 +28,6 @@ jobs:
       - name: Install build dependencies
         run: python -m pip install --upgrade build
 
-      - name: Determine version from Git
-        run: echo "SETUPTOOLS_SCM_PRETEND_VERSION=$(git describe --tags --always)" >> $GITHUB_ENV
-
-      - name: Build package distribution
-        run: python -m build --sdist
-        env:
-          SETUPTOOLS_SCM_PRETEND_VERSION: ${{ env.SETUPTOOLS_SCM_PRETEND_VERSION }}
-
       - name: Build package distribution
         run: python -m build --sdist
 

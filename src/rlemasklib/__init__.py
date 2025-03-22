@@ -10,6 +10,11 @@ There are two ways to use this library:
 
 """
 
+try:
+    from ._version import version as __version__
+except ImportError:
+    __version__ = "0.0.0"
+
 __all__ = [
     "RLEMask",
     "encode",
