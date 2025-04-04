@@ -52,7 +52,7 @@ cdef extern from "encode_decode.h" nogil:
     bool rleDecode(const RLE *R, byte *mask, siz n, byte value)
     char *rleToString(const RLE *R)
     uint rleFrString(RLE *R, char *s, siz h, siz w)
-    void rlesToLabelMapZeroInit(const RLE **R, siz n, byte *label_map)
+    void rlesToLabelMapZeroInit(const RLE **R, byte *label_map, siz n)
 
 
 cdef extern from "boolfuncs.h" nogil:
@@ -838,7 +838,7 @@ cdef class RLECy:
         # prepare the zeros np array:
         cdef np.ndarray[np.uint8_t, ndim=2, mode='fortran'] labelmap = np.zeros(
             rles[0].shape, dtype=np.uint8, order='F')
-        rlesToLabelMapZeroInit(rles_ptr, len(rles), &labelmap[0, 0])
+        rlesToLabelMapZeroInit(rles_ptr, &labelmap[0, 0], len(rles))
         return labelmap
 
 
