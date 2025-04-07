@@ -75,7 +75,7 @@ void rleEncodeThresh128(RLE *R, const byte *M, siz h, siz w, siz n) {
 bool rleDecode(const RLE *R, byte *M, siz n, byte value) {
     // M must be zeroed out in advance
     if (value == 0) {
-        return;
+        return true;
     }
 
     byte *end = M + R->h * R->w * n;
