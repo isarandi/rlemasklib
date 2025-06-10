@@ -750,7 +750,7 @@ cdef class RLECy:
         shape[1] = 2
 
         arr = np.PyArray_SimpleNewFromData(2, shape, np.NPY_UINT32, coords)
-        PyArray_ENABLEFLAGS(arr, np.NPY_OWNDATA)
+        PyArray_ENABLEFLAGS(arr, np.NPY_ARRAY_OWNDATA)
         return arr
 
     cpdef RLECy clone(self):

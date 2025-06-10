@@ -86,7 +86,7 @@ cdef extern from "transpose_flip.h" nogil:
 #     cdef np.npy_intp shape[1]
 #     shape[0] = <np.npy_intp> n_encoded
 #     a = np.PyArray_SimpleNewFromData(1, shape, np.NPY_UINT8, encoded)
-#     PyArray_ENABLEFLAGS(a, np.NPY_OWNDATA)
+#     PyArray_ENABLEFLAGS(a, np.NPY_ARRAY_OWNDATA)
 #     return a
 #
 # def leb128_enc2(np.ndarray[np.int32_t, ndim=1] cnts):
@@ -96,7 +96,7 @@ cdef extern from "transpose_flip.h" nogil:
 #     cdef np.npy_intp shape[1]
 #     shape[0] = <np.npy_intp> n_encoded
 #     a = np.PyArray_SimpleNewFromData(1, shape, np.NPY_UINT8, encoded)
-#     PyArray_ENABLEFLAGS(a, np.NPY_OWNDATA)
+#     PyArray_ENABLEFLAGS(a, np.NPY_ARRAY_OWNDATA)
 #     return a
 
 
@@ -143,7 +143,7 @@ cdef class Masks:
         ndarray = np.PyArray_SimpleNewFromData(1, shape, np.NPY_UINT8, self._mask).reshape(
             (self._h, self._w, self._n), order='F')
         # The _mask allocated by Masks is now handled by ndarray
-        PyArray_ENABLEFLAGS(ndarray, np.NPY_OWNDATA)
+        PyArray_ENABLEFLAGS(ndarray, np.NPY_ARRAY_OWNDATA)
         return ndarray
 
 # internal conversion from Python RLEs object to compressed RLE format
@@ -274,7 +274,7 @@ def area(rleObjs):
     cdef np.npy_intp shape[1]
     shape[0] = <np.npy_intp> Rs._n
     a = np.PyArray_SimpleNewFromData(1, shape, np.NPY_UINT32, _a)
-    PyArray_ENABLEFLAGS(a, np.NPY_OWNDATA)
+    PyArray_ENABLEFLAGS(a, np.NPY_ARRAY_OWNDATA)
     return a
 
 def crop(rleObjs, np.ndarray[np.uint32_t, ndim=2] bb):
@@ -386,7 +386,7 @@ def iou(dt, gt, pyiscrowd):
     iou = np.zeros((m * n,), dtype=np.double)
     shape[0] = <np.npy_intp> m * n
     iou = np.PyArray_SimpleNewFromData(1, shape, np.NPY_DOUBLE, _iou)
-    PyArray_ENABLEFLAGS(iou, np.NPY_OWNDATA)
+    PyArray_ENABLEFLAGS(iou, np.NPY_ARRAY_OWNDATA)
     _iouFun(dt, gt, iscrowd, m, n, iou)
     return iou.reshape((m, n), order='F')
 
@@ -398,7 +398,7 @@ def toBbox(rleObjs):
     cdef np.npy_intp shape[1]
     shape[0] = <np.npy_intp> 4 * n
     bb = np.PyArray_SimpleNewFromData(1, shape, np.NPY_DOUBLE, _bb).reshape((n, 4))
-    PyArray_ENABLEFLAGS(bb, np.NPY_OWNDATA)
+    PyArray_ENABLEFLAGS(bb, np.NPY_ARRAY_OWNDATA)
     return bb
 
 def frBbox(np.ndarray[np.double_t, ndim=2] bb, siz h, siz w):
@@ -472,5 +472,5 @@ def centroid(rleObjs):
     cdef np.npy_intp shape[1]
     shape[0] = <np.npy_intp> 2 * n
     xys = np.PyArray_SimpleNewFromData(1, shape, np.NPY_DOUBLE, _xys).reshape((n, 2))
-    PyArray_ENABLEFLAGS(xys, np.NPY_OWNDATA)
+    PyArray_ENABLEFLAGS(xys, np.NPY_ARRAY_OWNDATA)
     return xys
