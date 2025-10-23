@@ -71,7 +71,7 @@ void rleLargestInteriorRectangle(const RLE *R_, uint* rect_out) {
     } else {
         bbox[0] = 0;
         bbox[1] = 0;
-        R = R_;
+        R = (RLE *) R_;
     }
     siz h = R->h;
     siz w = R->w;
@@ -251,7 +251,7 @@ void rleLargestInteriorRectangleAspect(const RLE *R_, double* rect_out, double a
     } else {
         bbox[0] = 0;
         bbox[1] = 0;
-        R = R_;
+        R = (RLE *) R_;
     }
     siz h = R->h;
     siz w = R->w;

@@ -381,7 +381,7 @@ static void _rleVerticalBlur(const RLE *R, RLE *M) {
     tmp2.cnts[0]++; // stretch the first
     tmp2.cnts[tmp2.m - 1]--; // shrink the last
 
-    RLE *Rs[3] = {R, &tmp1, &tmp2};
+    const RLE *Rs[3] = {R, &tmp1, &tmp2};
     rleMergeAtLeast2(Rs, M, 3, 2);
     rleFree(&tmp1);
     rleFree(&tmp2);

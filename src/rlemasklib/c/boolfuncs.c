@@ -234,7 +234,7 @@ void rleMergeMultiFunc(const RLE **R, RLE *M, siz n, uint* boolfuncs) {
     siz m_max = sizMin(h * w + 1, m_total);
     rleInit(&tmp, h, w, m_max);
     rleInit(M, h, w, m_max);
-    RLE *A = R[0];
+    RLE *A = (RLE *) R[0];
 
     siz m;
     for (siz i = 1; i < n; i++) {
@@ -323,7 +323,7 @@ void rleMergePtr(const RLE **R, RLE *M, siz n, uint boolfunc) {
     siz m_max = sizMin(h * w + 1, m_total);
     rleInit(&tmp, h, w, m_max);
     rleInit(M, h, w, m_max);
-    RLE *A = R[0];
+    RLE *A = (RLE *)R[0];
 
     siz m;
     for (siz i = 1; i < n; i++) {
@@ -411,7 +411,7 @@ void rleMerge(const RLE *R, RLE *M, siz n, uint boolfunc) {
     siz m_max = sizMin(h * w + 1, m_total);
     rleInit(&tmp, h, w, m_max);
     rleInit(M, h, w, m_max);
-    RLE *A = &R[0];
+    RLE *A = (RLE *) &R[0];
 
     siz m;
     for (siz i = 1; i < n; i++) {
@@ -715,7 +715,7 @@ void rleMergeAtLeast2(const RLE **R, RLE *M, siz n, uint k) {
 }
 
 static inline bool _boolfunc_atLeast(uint32_t vs, siz n, void *kp) {
-    return popcount(vs) >= *(uint*)kp;
+    return (uint)popcount(vs) >= *(uint*)kp;
 }
 void rleMergeAtLeast(const RLE **R, RLE *M, siz n, uint k) {
     _rleMergeCustom(R, M, n, _boolfunc_atLeast, &k);

@@ -232,7 +232,7 @@ void rleVerticalFlip(const RLE* R, RLE* M) {
             }
         }
 
-        for (long jj = j; jj >= prev_end_j; jj--) {
+        for (unsigned long jj = j; jj >= prev_end_j; jj--) {
             if (jj == j) {
                 cnts_out[j_out++] = to_add + to_bottom;
                 cnt -= to_bottom;
