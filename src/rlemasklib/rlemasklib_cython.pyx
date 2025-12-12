@@ -12,6 +12,7 @@
 import numpy as np
 cimport numpy as np
 from libc.stdlib cimport malloc, free, calloc
+from libc.stdint cimport uint64_t, uint32_t, uint8_t
 
 # initialize Numpy. must do.
 np.import_array()
@@ -29,9 +30,9 @@ cdef extern from "stdbool.h":
 
 # Declare the prototype of the C functions in rlemasklib.h
 cdef extern from "basics.h" nogil:
-    ctypedef unsigned int uint
-    ctypedef unsigned long siz
-    ctypedef unsigned char byte
+    ctypedef uint32_t uint
+    ctypedef uint64_t siz
+    ctypedef uint8_t byte
     ctypedef double * BB
     ctypedef struct RLE:
         siz h,

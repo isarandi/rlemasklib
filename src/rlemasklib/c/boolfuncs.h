@@ -3,10 +3,15 @@
 #include <stdint.h>
 #include "basics.h"
 
-extern const uint BOOLFUNC_AND;
-extern const uint BOOLFUNC_OR;
-extern const uint BOOLFUNC_XOR;
-extern const uint BOOLFUNC_SUB;
+// Truth table constants for two-input boolean functions
+// BOOLFUNC_X represents input X (1100 in binary = bits where X is true)
+// BOOLFUNC_Y represents input Y (1010 in binary = bits where Y is true)
+#define BOOLFUNC_X 12
+#define BOOLFUNC_Y 10
+#define BOOLFUNC_AND (BOOLFUNC_X & BOOLFUNC_Y)
+#define BOOLFUNC_OR (BOOLFUNC_X | BOOLFUNC_Y)
+#define BOOLFUNC_XOR (BOOLFUNC_X ^ BOOLFUNC_Y)
+#define BOOLFUNC_SUB (BOOLFUNC_X & ~BOOLFUNC_Y)
 
 void rleComplement(const RLE *R, RLE *M, siz n);
 void rleComplementInplace(RLE *R, siz n);

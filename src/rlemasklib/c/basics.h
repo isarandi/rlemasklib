@@ -1,10 +1,11 @@
 #pragma once
 
 #include <stdbool.h> // for bool
+#include <stdint.h>  // for uint32_t, uint64_t
 
-typedef unsigned int uint;
-typedef unsigned long siz;
-typedef unsigned char byte;
+typedef uint32_t uint;
+typedef uint64_t siz;
+typedef uint8_t byte;
 typedef double *BB;
 
 // Rules

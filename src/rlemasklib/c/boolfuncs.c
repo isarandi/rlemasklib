@@ -7,13 +7,6 @@
 #include "minmax.h"
 
 
-const uint _X = 12;  // Binary 1100
-const uint _Y = 10;  // Binary 1010
-const uint BOOLFUNC_AND = _X & _Y;
-const uint BOOLFUNC_OR = _X | _Y;
-const uint BOOLFUNC_XOR = _X ^ _Y;
-const uint BOOLFUNC_SUB = _X & ~_Y;
-
 // Apply a boolean function (encoded as a truth table uint) to two boolean values
 static inline bool _applyBoolFunc(bool x, bool y, uint boolfunc);
 

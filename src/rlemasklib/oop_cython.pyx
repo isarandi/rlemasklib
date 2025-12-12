@@ -9,7 +9,7 @@ from libc.string cimport strlen, memcpy
 from typing import Union, Optional
 from collections.abc import Sequence, Iterable
 from rlemasklib.boolfunc import BoolFunc
-from libc.stdint cimport uint64_t
+from libc.stdint cimport uint64_t, uint32_t, uint8_t
 import struct
 # intialized Numpy. must do.
 np.import_array()
@@ -24,9 +24,9 @@ cdef extern from "stdbool.h":
     ctypedef int bool
 
 cdef extern from "basics.h" nogil:
-    ctypedef unsigned int uint
-    ctypedef unsigned long siz
-    ctypedef unsigned char byte
+    ctypedef uint32_t uint
+    ctypedef uint64_t siz
+    ctypedef uint8_t byte
     ctypedef double * BB
     ctypedef struct RLE:
         siz h,
