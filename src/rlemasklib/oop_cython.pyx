@@ -671,33 +671,52 @@ cdef class RLECy:
         self.r.h = new_shape[0]
         self.r.w = new_shape[1]
 
-    def _r_to_dense_array(self, value, order) -> np.ndarray:
+    def _decode_into(self, arr: np.ndarray, value: int = 1):
+        """Decode RLE into an existing array, only setting foreground pixels to `value`.
+
+        Background pixels are left unchanged, allowing overlay of multiple masks.
+        """
         cdef byte[::1] data
         cdef RLECy transp
         cdef bool success
+
+        if arr.shape[0] != self.r.h or arr.shape[1] != self.r.w:
+            raise ValueError(
+                f"Array shape ({arr.shape[0]}, {arr.shape[1]}) does not match RLE shape ({self.r.h}, {self.r.w})")
+
         if self.r.h > 0 and self.r.w > 0:
-            arr = np.zeros(shape=(self.r.h * self.r.w,), dtype=np.uint8)
-            data = arr
-            if order == 'F':
+            if arr.flags.f_contiguous:
+                data = arr.ravel(order='F')
                 success = rleDecode(&self.r, &data[0], 1, value)
                 if not success:
                     raise ValueError("Invalid RLE, sum of runlengths exceeds the number of pixels")
-                return arr.reshape(self.shape, order='F')
+            elif arr.flags.c_contiguous:
+                transp = self._r_transpose()
+                data = arr.ravel(order='C')
+                success = rleDecode(&transp.r, &data[0], 1, value)
+                if not success:
+                    raise ValueError("Invalid RLE, sum of runlengths exceeds the number of pixels")
             else:
-                is_sparse = self.r.m < self.r.h * self.r.w * 0.04
-                if is_sparse:
-                    transp = self._r_transpose()
-                    success = rleDecode(&transp.r, &data[0], 1, value)
-                    if not success:
-                        raise ValueError("Invalid RLE, sum of runlengths exceeds the number of pixels")
-                    return arr.reshape(self.shape, order='C')
-                else:
-                    success = rleDecode(&self.r, &data[0], 1, value)
-                    if not success:
-                        raise ValueError("Invalid RLE, sum of runlengths exceeds the number of pixels")
-                    return np.ascontiguousarray(arr.reshape(self.shape, order='F'))
-        else:
+                raise ValueError("Array must be either C-contiguous or Fortran-contiguous")
+
+    def _r_to_dense_array(self, value, order) -> np.ndarray:
+        if self.r.h == 0 or self.r.w == 0:
             return np.empty((self.r.h, self.r.w), dtype=np.uint8)
+
+        if order == 'F':
+            arr = np.zeros((self.r.h, self.r.w), dtype=np.uint8, order='F')
+        else:
+            is_sparse = self.r.m < self.r.h * self.r.w * 0.04
+            if is_sparse:
+                arr = np.zeros((self.r.h, self.r.w), dtype=np.uint8, order='C')
+            else:
+                arr = np.zeros((self.r.h, self.r.w), dtype=np.uint8, order='F')
+
+        self._decode_into(arr, value)
+
+        if order == 'C' and arr.flags.f_contiguous:
+            return np.ascontiguousarray(arr)
+        return arr
 
     def _i_zeros(self, shape):
         rleZeros(&self.r, shape[0], shape[1])

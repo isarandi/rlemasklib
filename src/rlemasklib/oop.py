@@ -1933,6 +1933,33 @@ class RLEMask:
         """
         return self.cy._r_to_dense_array(value, order)
 
+    def decode_into(self, arr: np.ndarray, value: int = 1) -> None:
+        """Decode the RLE mask into an existing array, only setting foreground pixels.
+
+        This method sets foreground pixels to the specified value while leaving
+        background pixels unchanged. This is useful for overlaying multiple masks
+        onto a single array, e.g., creating a label map or visualization.
+
+        Args:
+            arr: A 2D uint8 numpy array with shape matching the mask.
+                 Must be either C-contiguous or Fortran-contiguous.
+            value: The value to assign to foreground pixels (default: 1).
+
+        Raises:
+            ValueError: If array shape doesn't match mask shape or array is not contiguous.
+
+        Example:
+            >>> canvas = np.zeros((100, 100), dtype=np.uint8)
+            >>> mask1.decode_into(canvas, value=1)
+            >>> mask2.decode_into(canvas, value=2)
+            >>> mask3.decode_into(canvas, value=3)
+            # canvas now contains 1, 2, 3 for respective mask regions
+
+        See Also:
+            :meth:`to_array`
+        """
+        self.cy._decode_into(arr, value)
+
     # def __getstate__(self):
     #     return self.to_dict()
     #
