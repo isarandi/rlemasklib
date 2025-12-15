@@ -298,12 +298,12 @@ void rleFrString(RLE *R, const char *s, siz h, siz w) {
 void rlesToLabelMapZeroInit(const RLE **Rs, byte *M, siz n) {
     for (siz i = 0; i < n; i++) {
         siz r = 0;
-        uint *pcnt = Rs[i]->cnts;
-        uint *pend = pcnt + Rs[i]->m;
-        while (pcnt < pend) {
-            r += *(pcnt++);
-            memset(M + r, i + 1, *pcnt);
-            r += *(pcnt++);
+        uint *cnts = Rs[i]->cnts;
+        siz m = Rs[i]->m;
+        for (siz j = 1; j < m; j += 2) {
+            r += cnts[j - 1];
+            memset(M + r, i + 1, cnts[j]);
+            r += cnts[j];
         }
     }
 }
