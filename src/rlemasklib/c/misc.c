@@ -46,42 +46,67 @@ void rleDilateVerticalInplace(RLE *R, uint up, uint down) {
 }
 
 void rleConcatHorizontal(const RLE **R, RLE *M, siz n) {
-    siz m_out = R[0]->m;
-    siz w_out = R[0]->w;
-    for (siz i = 1; i < n; i++) {
+    // Handle h==0 case: all masks are empty, just sum widths
+    if (R[0]->h == 0) {
+        siz w_out = 0;
+        for (siz i = 0; i < n; i++) {
+            w_out += R[i]->w;
+        }
+        rleInit(M, 0, w_out, 0);
+        return;
+    }
+
+    // Calculate output size, tracking last non-empty mask for merge calculations
+    siz m_out = 0;
+    siz w_out = 0;
+    siz last_nonempty = n;  // invalid index initially
+    for (siz i = 0; i < n; i++) {
         m_out += R[i]->m;
         w_out += R[i]->w;
-        bool lastPixelA = R[i-1]->m % 2 == 0;
-        bool firstPixelB = R[i]->cnts[0] == 0;
-        if (!lastPixelA) {
-            m_out -= 1;
-        } else if (firstPixelB) {
-            m_out -= 2;
+        if (R[i]->m == 0) {
+            continue;
         }
+        if (last_nonempty < n) {
+            bool lastPixelA = R[last_nonempty]->m % 2 == 0;
+            bool firstPixelB = R[i]->cnts[0] == 0;
+            if (!lastPixelA) {
+                m_out -= 1;
+            } else if (firstPixelB) {
+                m_out -= 2;
+            }
+        }
+        last_nonempty = i;
     }
 
     uint *cnts_out = rleInit(M, R[0]->h, w_out, m_out);
-    memcpy(cnts_out, R[0]->cnts, sizeof(uint) * R[0]->m);
-    siz i_out = R[0]->m;
+    siz i_out = 0;
+    last_nonempty = n;  // reset
 
-    for (siz i = 1; i < n; i++) {
-        const RLE *A = R[i-1];
-        const RLE *B = R[i];
-
-        bool lastPixelA = A->m % 2 == 0;
-        bool firstPixelB = B->cnts[0] == 0;
-        if (!lastPixelA) {
-            cnts_out[i_out - 1] += B->cnts[0];
-            memcpy(cnts_out + i_out, B->cnts + 1, sizeof(uint) * (B->m - 1));
-            i_out += B->m - 1;
-        } else if (firstPixelB){
-            cnts_out[i_out - 1] += B->cnts[1];
-            memcpy(cnts_out + i_out, B->cnts + 2, sizeof(uint) * (B->m - 2));
-            i_out += B->m - 2;
-        } else {
-            memcpy(cnts_out + i_out, B->cnts, sizeof(uint) * B->m);
-            i_out += B->m;
+    for (siz i = 0; i < n; i++) {
+        if (R[i]->m == 0) {
+            continue;
         }
+        if (last_nonempty == n) {
+            // First non-empty mask, just copy
+            memcpy(cnts_out, R[i]->cnts, sizeof(uint) * R[i]->m);
+            i_out = R[i]->m;
+        } else {
+            bool lastPixelA = R[last_nonempty]->m % 2 == 0;
+            bool firstPixelB = R[i]->cnts[0] == 0;
+            if (!lastPixelA) {
+                cnts_out[i_out - 1] += R[i]->cnts[0];
+                memcpy(cnts_out + i_out, R[i]->cnts + 1, sizeof(uint) * (R[i]->m - 1));
+                i_out += R[i]->m - 1;
+            } else if (firstPixelB) {
+                cnts_out[i_out - 1] += R[i]->cnts[1];
+                memcpy(cnts_out + i_out, R[i]->cnts + 2, sizeof(uint) * (R[i]->m - 2));
+                i_out += R[i]->m - 2;
+            } else {
+                memcpy(cnts_out + i_out, R[i]->cnts, sizeof(uint) * R[i]->m);
+                i_out += R[i]->m;
+            }
+        }
+        last_nonempty = i;
     }
 }
 
