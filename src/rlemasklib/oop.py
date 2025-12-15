@@ -458,8 +458,13 @@ class RLEMask:
                 if not isinstance(value, int):
                     raise ValueError("Value must be an integer when indexing with integers")
                 self.cy._i_set_int_index(key[0], key[1], value)
+            else:
+                raise ValueError(
+                    "Mixed integer and slice indexing is not supported. "
+                    "Use two slices (rle[1:3, 2:4] = ...) or two integers (rle[1, 2] = ...)"
+                )
         else:
-            raise ValueError("Only 2D indexing is supported with integer indices")
+            raise ValueError("Only 2D indexing is supported")
 
     def __invert__(self) -> "RLEMask":
         """Compute the complement of an RLE mask.
