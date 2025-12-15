@@ -504,6 +504,7 @@ class RLEMask:
         See Also:
             :meth:`union`
         """
+        self._raise_if_different_shape(other)
         return RLEMask._init(self.cy._r_boolfunc(other.cy, BoolFunc.OR.value))
 
     def __ior__(self, other: "RLEMask") -> "RLEMask":
