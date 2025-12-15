@@ -488,11 +488,10 @@ cdef class RLECy:
             raise ValueError("The number of weights must be equal to the number of RLEs")
 
         cdef RLECy result
-        cdef RLECy rle
         cdef double[::1] weights_double
         try:
-            for i, rle in enumerate(rles):
-                rles_ptr[i] = &rle.r
+            for i in range(len(rles)):
+                rles_ptr[i] = &(<RLECy>rles[i]).r
 
             weights_double = np.ascontiguousarray(weights, dtype=np.float64)
             result = RLECy()
@@ -508,10 +507,9 @@ cdef class RLECy:
             raise MemoryError("Failed to allocate memory for RLE pointers")
 
         cdef RLECy result
-        cdef RLECy rle
         try:
-            for i, rle in enumerate(rles):
-                rles_ptr[i] = &rle.r
+            for i in range(len(rles)):
+                rles_ptr[i] = &(<RLECy>rles[i]).r
 
             result = RLECy()
             rleMergeAtLeast(rles_ptr, &result.r, len(rles), threshold)
@@ -526,10 +524,9 @@ cdef class RLECy:
             raise MemoryError("Failed to allocate memory for RLE pointers")
 
         cdef RLECy result
-        cdef RLECy rle
         try:
-            for i, rle in enumerate(rles):
-                rles_ptr[i] = &rle.r
+            for i in range(len(rles)):
+                rles_ptr[i] = &(<RLECy>rles[i]).r
 
             result = RLECy()
             rleConcatHorizontal(rles_ptr, &result.r, len(rles))
@@ -544,10 +541,9 @@ cdef class RLECy:
             raise MemoryError("Failed to allocate memory for RLE pointers")
 
         cdef RLECy result
-        cdef RLECy rle
         try:
-            for i, rle in enumerate(rles):
-                rles_ptr[i] = &rle.r
+            for i in range(len(rles)):
+                rles_ptr[i] = &(<RLECy>rles[i]).r
 
             result = RLECy()
             rleConcatVertical(rles_ptr, &result.r, len(rles))
@@ -832,9 +828,9 @@ cdef class RLECy:
         if not rles_ptr:
             raise MemoryError("Failed to allocate memory for RLE pointers")
 
-        cdef RLECy rle
-        for i, rle in enumerate(rles):
-            rles_ptr[i] = &rle.r
+        cdef siz i
+        for i in range(len(rles)):
+            rles_ptr[i] = &(<RLECy>rles[i]).r
         # prepare the zeros np array:
         cdef np.ndarray[np.uint8_t, ndim=2, mode='fortran'] labelmap = np.zeros(
             rles[0].shape, dtype=np.uint8, order='F')
