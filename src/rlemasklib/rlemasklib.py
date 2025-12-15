@@ -713,8 +713,7 @@ def remove_small_components(rle: dict, connectivity: int = 4, min_size: int = 1)
     Returns:
         An RLE mask dictionary of the mask with small connected components removed.
     """
-    components = connected_components(rle, connectivity, min_size)
-    return union(components)
+    return rlemasklib_cython.removeSmallComponents(rle, min_size, connectivity)
 
 
 def fill_small_holes(rle: dict, connectivity: int = 4, min_size: int = 1) -> dict:

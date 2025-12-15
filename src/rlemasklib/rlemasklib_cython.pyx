@@ -74,6 +74,7 @@ cdef extern from "shapes.h" nogil:
 cdef extern from "connected_components.h" nogil:
     void rleConnectedComponents(const RLE *R_in, int connectivity, siz min_size, RLE ** components,
                                 siz *n)
+    void rleRemoveSmallConnectedComponentsInplace(RLE *R_in, siz min_size, int connectivity)
 
 cdef extern from "transpose_flip.h" nogil:
     void rleTranspose(const RLE *R, RLE * M)
@@ -464,6 +465,11 @@ def connectedComponents(rleObj, connectivity=4, min_size=1):
     cdef RLEs Rs_out = RLEs(0)
     rleConnectedComponents(<RLE *> Rs._R, connectivity, min_size, &Rs_out._R, &Rs_out._n)
     return _to_leb128_dicts(Rs_out)
+
+def removeSmallComponents(rleObj, min_size=1, connectivity=4):
+    cdef RLEs Rs = _from_leb128_dicts([rleObj])
+    rleRemoveSmallConnectedComponentsInplace(Rs._R, min_size, connectivity)
+    return _to_leb128_dicts(Rs)[0]
 
 def centroid(rleObjs):
     cdef RLEs Rs = _from_leb128_dicts(rleObjs)
