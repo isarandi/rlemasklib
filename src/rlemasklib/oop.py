@@ -1839,7 +1839,7 @@ class RLEMask:
         if num_h == 0 or num_w == 0:
             return RLEMask.zeros((self.shape[0] * num_h, self.shape[1] * num_w))
 
-        return RLEMask.hconcat([RLEMask.vconcat([self] * num_w)] * num_h)
+        return RLEMask.hconcat([RLEMask.vconcat([self] * num_h)] * num_w)
 
     def copy(self) -> "RLEMask":
         """Clone the mask.
