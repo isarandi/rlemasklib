@@ -71,8 +71,8 @@ def encode(
     """Encode binary mask into a compressed RLE.
 
     Args:
-        mask: a binary mask (numpy 2D array of any type, where zero is background and nonzero
-            is foreground)
+        mask: a binary mask (numpy 2D array where zero is background and nonzero is foreground).
+            For best performance, use uint8 or bool dtype. Other dtypes will be converted.
         compressed: whether to compress the RLE using the LEB128-like algorithm from COCO (and
             potentially zlib afterwards).
         zlevel: zlib compression level. None means no zlib compression, numbers up to 9 are
@@ -86,11 +86,12 @@ def encode(
             - ``"ucounts"`` -- uncompressed run-length counts
             - ``"counts"`` -- LEB128-like compressed run-length counts
             - ``"zcounts"`` -- zlib-compressed LEB128-like compressed run-length counts
+
     """
     if mask.dtype == np.bool_:
         mask = mask.view(np.uint8)
     elif mask.dtype != np.uint8:
-        mask = np.asfortranarray(mask, dtype=np.uint8)
+        mask = np.asfortranarray(mask != 0, dtype=np.uint8)
 
     if mask.flags.c_contiguous and (batch_first or len(mask.shape) == 2):
         encoded = _encode_C_order(mask, compress_leb128=compressed)
