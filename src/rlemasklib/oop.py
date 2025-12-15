@@ -846,6 +846,8 @@ class RLEMask:
         Returns:
             A new RLEMask object representing the resized mask.
         """
+        if self.shape[0] == 0 or self.shape[1] == 0:
+            return RLEMask.zeros(output_imshape)
 
         if output_imshape is None:
             if fx is None or fy is None:
@@ -1792,7 +1794,7 @@ class RLEMask:
         if not all(cy.shape[0] == cys[0].shape[0] for cy in cys):
             raise ValueError("Masks must have the same height to be concatenated horizontally")
 
-        return RLEMask._init(RLECy.concat_horizontal([m.cy for m in masks]))
+        return RLEMask._init(RLECy.concat_horizontal(cys))
 
     @staticmethod
     def vconcat(masks: Iterable["RLEMask"]) -> "RLEMask":
