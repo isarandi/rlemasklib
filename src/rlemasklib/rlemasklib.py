@@ -417,7 +417,18 @@ def merge(masks, boolfunc: BoolFunc):
 
     Returns:
         An RLE mask dictionary of the merged masks.
+
+    Raises:
+        ValueError: if masks have different sizes
     """
+    if len(masks) > 1:
+        size0 = tuple(masks[0]['size'])
+        for i, m in enumerate(masks[1:], 1):
+            if tuple(m['size']) != size0:
+                raise ValueError(
+                    f"All masks must have the same size. "
+                    f"Mask 0 has size {size0}, mask {i} has size {tuple(m['size'])}"
+                )
     return rlemasklib_cython.merge(masks, boolfunc)
 
 
