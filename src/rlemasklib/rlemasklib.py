@@ -520,8 +520,11 @@ def shift(rle: dict, offset: tuple[int, int], border_value: int = 0) -> dict:
     if offset == (0, 0):
         return rle
     h, w = rle["size"]
-    paddings = np.maximum(0, np.array([offset[0], -offset[0], offset[1], -offset[1]]))
-    cropbox = np.maximum(0, np.array([-offset[0], -offset[1], w, h]))
+    dy, dx = offset
+    # pad() takes [left, right, top, bottom]
+    paddings = np.maximum(0, np.array([dx, -dx, dy, -dy]))
+    # crop() takes [x, y, w, h]
+    cropbox = np.maximum(0, np.array([-dx, -dy, w, h]))
     return crop(pad(rle, paddings, border_value), cropbox)
 
 
