@@ -21,7 +21,7 @@ void rleEncode(RLE *R, const byte *M, siz h, siz w, siz n) {
         byte prev = 0;
         uint c = 0;
         for (siz j = 0; j < a; j++) {
-            byte current = T[j];
+            byte current = T[j] != 0;
             if (current != prev) {
                 cnts[k++] = c;
                 c = 0;
