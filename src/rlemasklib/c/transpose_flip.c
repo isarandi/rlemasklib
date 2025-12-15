@@ -86,7 +86,7 @@ void rleRoll(const RLE *R, RLE *M) {
         uint box_start = h * (w - 1);
         uint cnt_first;
         siz r = h * w;
-        for (siz j = m - 1; j >= 0; j--) {
+        for (int64_t j = m - 1; j >= 0; j--) {
             uint r_end = r;
             r -= cnts_in[j];
             if (r <= box_start) {
@@ -140,7 +140,7 @@ void rleRoll(const RLE *R, RLE *M) {
         siz j_last;
         uint cnt_last;
         uint r = r_first;
-        for (siz j = j_first; j >= 0; j--) {
+        for (int64_t j = j_first; j >= 0; j--) {
             r -= cnts_in[j];
             if (r < box_end) {
                 j_last = j;
@@ -232,7 +232,7 @@ void rleVerticalFlip(const RLE* R, RLE* M) {
             }
         }
 
-        for (unsigned long jj = j; jj >= prev_end_j; jj--) {
+        for (int64_t jj = j; jj >= (int64_t)prev_end_j; jj--) {
             if (jj == j) {
                 cnts_out[j_out++] = to_add + to_bottom;
                 cnt -= to_bottom;
