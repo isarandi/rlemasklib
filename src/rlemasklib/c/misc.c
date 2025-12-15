@@ -73,11 +73,14 @@ void rleConcatHorizontal(const RLE **R, RLE *M, siz n) {
         if (!lastPixelA) {
             cnts_out[i_out - 1] += B->cnts[0];
             memcpy(cnts_out + i_out, B->cnts + 1, sizeof(uint) * (B->m - 1));
+            i_out += B->m - 1;
         } else if (firstPixelB){
             cnts_out[i_out - 1] += B->cnts[1];
             memcpy(cnts_out + i_out, B->cnts + 2, sizeof(uint) * (B->m - 2));
+            i_out += B->m - 2;
         } else {
             memcpy(cnts_out + i_out, B->cnts, sizeof(uint) * B->m);
+            i_out += B->m;
         }
     }
 }
