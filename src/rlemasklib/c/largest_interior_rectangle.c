@@ -595,7 +595,7 @@ void rleLargestInteriorRectangleAroundCenter(
     double best_hist = 0;
     uint min_hist = max_hist;
     for (siz i = 0; i < xdist_earliest_zero; i++) {
-        if (hist[i] == hist[i+1]) {
+        if (i + 1 < histsize && hist[i] == hist[i+1]) {
             continue;
         }
         if (hist[i] < min_hist) {

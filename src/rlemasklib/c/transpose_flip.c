@@ -197,6 +197,10 @@ void rleVerticalFlip(const RLE* R, RLE* M) {
     siz x = 1;
 
     siz j_start = (cnts[0] > 0) ? 0 : 1;
+    if (j_start >= m) {
+        rleRealloc(M, 0);
+        return;
+    }
     uint prev_end_j = j_start;
     uint prev_end_remainder = cnts[j_start];
     for (siz j = j_start; j < m;) {
@@ -233,7 +237,7 @@ void rleVerticalFlip(const RLE* R, RLE* M) {
         }
 
         for (int64_t jj = j; jj >= (int64_t)prev_end_j; jj--) {
-            if (jj == j) {
+            if (jj == (int64_t)j) {
                 cnts_out[j_out++] = to_add + to_bottom;
                 cnt -= to_bottom;
             } else if (jj == prev_end_j) {
@@ -244,7 +248,9 @@ void rleVerticalFlip(const RLE* R, RLE* M) {
         }
         if (cnt == 0) {
             j++;
-            prev_end_remainder = cnts[j];
+            if (j < m) {
+                prev_end_remainder = cnts[j];
+            }
         } else {
             prev_end_remainder = cnt;
         }

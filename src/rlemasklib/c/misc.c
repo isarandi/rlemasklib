@@ -35,12 +35,12 @@ void rleDilateVerticalInplace(RLE *R, uint up, uint down) {
             cnts[j - 1] -= amount;
             r -= amount;
         }
-        if ((r + cnts[j]) % h != 0) {
+        if (j + 1 < m && (r + cnts[j]) % h != 0) {
             uint amount = uintMin(cnts[j + 1], down);
             cnts[j] += amount;
             cnts[j + 1] -= amount;
         }
-        r += cnts[j] + cnts[j + 1];
+        r += cnts[j] + (j + 1 < m ? cnts[j + 1] : 0);
     }
     rleEliminateZeroRuns(R);
 }
