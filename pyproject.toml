@@ -52,6 +52,18 @@ dependencies = [
     "numpy"
 ]
 
+test = [
+    "pytest",
+    "numpy",
+    "hypothesis",
+    "opencv-python"
+]
+test-headless = [
+    "pytest",
+    "numpy",
+    "hypothesis",
+    "opencv-python-headless"
+]
 [project.urls]
 Homepage = "https://github.com/isarandi/rlemasklib"
 Repository = "https://github.com/isarandi/rlemasklib"
