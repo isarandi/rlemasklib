@@ -2,6 +2,7 @@
 #include <stddef.h> // for NULL
 #include <stdlib.h> // for malloc, free
 #include <string.h> // for memcpy
+#include <assert.h> // for assert
 #include "basics.h"
 #include "minmax.h"
 #include "pad_crop.h"
@@ -363,29 +364,28 @@ void rleZeroPad(const RLE *R, RLE *M, siz n, const uint *pad_amounts) {
 void rleZeroPadInplace(RLE *R, siz n, const uint *pad_amounts) {
     // pad_amounts is four values: left, right, top, bottom
     for (siz i = 0; i < n; i++) {
+        assert(rleOwnsData(&R[i]) && "Cannot pad borrowed RLE in-place");
         uint h = R[i].h;
         uint w = R[i].w;
         siz m = R[i].m;
 
         uint h_out = h + pad_amounts[2] + pad_amounts[3];
         uint w_out = w + pad_amounts[0] + pad_amounts[1];
-        R[i].h = h_out;
-        R[i].w = w_out;
 
         if (w_out == 0 || h_out == 0) {
-            free(R[i].cnts);
-            R[i].m = 0;
-            R[i].cnts = NULL;
+            rleFree(&R[i]);
+            rleInit(&R[i], h_out, w_out, 0);
             continue;
         }
 
         if (m == 0 || w == 0 || h == 0) {
-            // RLE is empty, so just fill in zeros.
-            R[i].m = 1;
-            R[i].cnts = realloc(R[i].cnts, sizeof(uint) * 1);
-            R[i].cnts[0] = h_out * w_out;
+            rleFree(&R[i]);
+            rleZeros(&R[i], h_out, w_out);
             continue;
         }
+
+        R[i].h = h_out;
+        R[i].w = w_out;
 
         uint start_px_addition = pad_amounts[0] * h_out + pad_amounts[2];
         uint end_px_addition = pad_amounts[1] * h_out + pad_amounts[3];

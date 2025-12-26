@@ -3,6 +3,7 @@
 #include <string.h> // for memcpy
 #include <stdint.h> // for uint32_t
 #include <stdio.h> // for printf
+#include <assert.h> // for assert
 #include "boolfuncs.h"
 #include "minmax.h"
 
@@ -105,27 +106,9 @@ void rleComplement(const RLE *R, RLE *M, siz n) {
     }
 }
 
-//void rleComplementInplace(RLE *R, siz n) {
-//    for (siz i = 0; i < n; i++) {
-//        siz h = R[i].h;
-//        siz w = R[i].w;
-//        if (R[i].m == 0 || h == 0 || w == 0) {
-//            continue;
-//        } else if (R[i].m > 0 && R[i].cnts[0] == 0) {
-//            // if the first run has size 0, we can just remove it
-//            memmove(R[i].cnts, R[i].cnts + 1, sizeof(uint) * (R[i].m - 1));
-//            rleRealloc(&R[i], R[i].m - 1);
-//        } else {
-//            // if the first run has size > 0, we need to add a new run of 0s at the beginning
-//            rleRealloc(&R[i], R[i].m + 1);
-//            memmove(R[i].cnts + 1, R[i].cnts, sizeof(uint) * (R[i].m - 1));
-//            R[i].cnts[0] = 0;
-//        }
-//    }
-//}
-
 void rleComplementInplace(RLE *R, siz n) {
     for (siz i = 0; i < n; i++) {
+        assert(rleOwnsData(&R[i]) && "Cannot complement borrowed RLE in-place");
         siz h = R[i].h;
         siz w = R[i].w;
         if (R[i].m == 0 || h == 0 || w == 0) {
