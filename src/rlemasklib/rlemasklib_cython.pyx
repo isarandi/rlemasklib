@@ -39,8 +39,12 @@ cdef extern from "basics.h" nogil:
         siz w,
         siz m,
         uint * cnts,
+        uint * alloc,
     void rlesInit(RLE ** R, siz n)
     void rlesFree(RLE ** R, siz n)
+    void rleFree(RLE *R)
+    uint *rleFrCnts(RLE *R, siz h, siz w, siz m, uint *cnts)
+    void rleBorrow(RLE *R, siz h, siz w, siz m, uint *cnts)
 
 cdef extern from "encode_decode.h" nogil:
     void rleEncode(RLE *R, const byte *M, siz h, siz w, siz n)
@@ -109,7 +113,10 @@ cdef class RLEs:
     cdef siz _n
 
     def __cinit__(self, siz n =0):
-        rlesInit(&self._R, n)
+        if n > 0:
+            rlesInit(&self._R, n)
+        else:
+            self._R = <RLE*>0  # Don't allocate when n=0 to avoid leak when _R is overwritten
         self._n = n
 
     # free the RLE array here
@@ -127,15 +134,18 @@ cdef class Masks:
     cdef siz _h
     cdef siz _w
     cdef siz _n
+    cdef bint _owns_data
 
     def __cinit__(self, h, w, n):
         self._mask = <byte *> calloc(h * w * n, sizeof(byte))
         self._h = h
         self._w = w
         self._n = n
-    # def __dealloc__(self):
-    # the memory management of _mask has been passed to np.ndarray
-    # it doesn't need to be freed here
+        self._owns_data = True
+
+    def __dealloc__(self):
+        if self._owns_data and self._mask != NULL:
+            free(self._mask)
 
     # return an np.ndarray in column-major order
     def to_array(self):
@@ -146,6 +156,7 @@ cdef class Masks:
             (self._h, self._w, self._n), order='F')
         # The _mask allocated by Masks is now handled by ndarray
         PyArray_ENABLEFLAGS(ndarray, np.NPY_ARRAY_OWNDATA)
+        self._owns_data = False
         return ndarray
 
 # internal conversion from Python RLEs object to compressed RLE format
@@ -232,25 +243,16 @@ def decode(rleObjs):
 def _from_uncompressed_dicts(rleObjs):
     cdef siz n = len(rleObjs)
     Rs = RLEs(n)
-    cdef bytes py_string
-    cdef char * c_string
-    cdef uint sum_counts
+    cdef np.ndarray[np.uint32_t, ndim=1] counts
+    cdef siz h, w
     for i, obj in enumerate(rleObjs):
-        counts = np.asarray(obj['ucounts'], dtype=np.uint32)
-        Rs._R[i].cnts = <uint *> malloc(counts.shape[0] * sizeof(uint))
-
-        data = <uint *> malloc(len(counts) * sizeof(uint))
-        sum_counts = 0
-        for j in range(len(counts)):
-            data[j] = <uint> counts[j]
-            sum_counts += data[j]
-        Rs._R[i] = RLE(obj['size'][0], obj['size'][1], len(counts), <uint *> data)
-
-        if sum_counts != Rs._R[i].h * Rs._R[i].w:
+        counts = np.ascontiguousarray(obj['ucounts'], dtype=np.uint32)
+        h, w = obj['size'][0], obj['size'][1]
+        if counts.sum() != h * w:
             raise ValueError(
-                f'Invalid RLE: Sum of runlengths is {sum_counts}, which does not match the '
-                f'expected {Rs._R[i].h * Rs._R[i].w} based on the mask height {Rs._R[i].h} and '
-                f'width {Rs._R[i].w}')
+                f'Invalid RLE: Sum of runlengths is {counts.sum()}, which does not match the '
+                f'expected {h * w} based on the mask height {h} and width {w}')
+        rleFrCnts(&Rs._R[i], h, w, len(counts), <uint*>&counts[0])
 
     return Rs
 
@@ -307,6 +309,7 @@ def iouMulti(rleObjs):
         return 0
 
     cdef uint union_area;
+    rleFree(&Rs_merged._R[0])  # free before reusing
     rleMerge(Rs._R, Rs_merged._R, Rs._n, _UNION)
     rleArea(Rs_merged._R, 1, &union_area)
 
@@ -422,19 +425,12 @@ def frPoly(poly, siz h, siz w):
 
 def frUncompressedRLE(ucRles):
     cdef np.ndarray[np.uint32_t, ndim=1] cnts
-    cdef RLE R
-    cdef uint *data
     n = len(ucRles)
     objs = []
     for i in range(n):
         Rs = RLEs(1)
-        cnts = np.asarray(ucRles[i]['ucounts'], dtype=np.uint32)
-
-        data = <uint *> malloc(len(cnts) * sizeof(uint))
-        for j in range(len(cnts)):
-            data[j] = <uint> cnts[j]
-        R = RLE(ucRles[i]['size'][0], ucRles[i]['size'][1], len(cnts), data)
-        Rs._R[0] = R
+        cnts = np.ascontiguousarray(ucRles[i]['ucounts'], dtype=np.uint32)
+        rleFrCnts(&Rs._R[0], ucRles[i]['size'][0], ucRles[i]['size'][1], len(cnts), <uint*>&cnts[0])
         objs.append(_to_leb128_dicts(Rs)[0])
     return objs
 

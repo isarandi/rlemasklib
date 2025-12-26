@@ -33,9 +33,11 @@ cdef extern from "basics.h" nogil:
         siz w,
         siz m,
         uint * cnts,
+        uint * alloc,
     void rlesInit(RLE ** R, siz n)
     uint *rleInit(RLE *R, siz h, siz w, siz m)
     uint *rleFrCnts(RLE *R, siz h, siz w, siz m, uint *cnts)
+    void rleBorrow(RLE *R, siz h, siz w, siz m, uint *cnts)
     void rleCopy(const RLE *R, RLE *M)
     void rleMoveTo(RLE *R, RLE *M)
     byte rleGet(const RLE *R, siz i, siz j)
@@ -45,13 +47,14 @@ cdef extern from "basics.h" nogil:
     bool rleEqual(const RLE *A, const RLE *B)
     void rlesFree(RLE **R, siz n)
     void rleFree(RLE *R)
+    void rleSwap(RLE *R, RLE *M)
 
 cdef extern from "encode_decode.h" nogil:
     void rleEncode(RLE *R, const byte *M, siz h, siz w, siz n)
     void rleEncodeThresh128(RLE *R, const byte *M, siz h, siz w, siz n)
     bool rleDecode(const RLE *R, byte *mask, siz n, byte value)
     char *rleToString(const RLE *R)
-    uint rleFrString(RLE *R, char *s, siz h, siz w)
+    void rleFrString(RLE *R, const char *s, siz h, siz w)
     void rlesToLabelMapZeroInit(const RLE **R, byte *label_map, siz n)
 
 
@@ -172,11 +175,7 @@ cdef class RLECy:
             if order == 'F':
                 rleFrCnts(&self.r, shape[0], shape[1], len(data), &data[0])
             else:
-                #tmp = RLE()
-                tmp.h = shape[1]
-                tmp.w = shape[0]
-                tmp.m = len(data)
-                tmp.cnts = &data[0]
+                rleBorrow(&tmp, shape[1], shape[0], len(data), &data[0])
                 rleTranspose(&tmp, &self.r)
         else:
             rleInit(&self.r, shape[0], shape[1], 0)
@@ -435,28 +434,45 @@ cdef class RLECy:
 
     @staticmethod
     def merge_many_multifunc(rles: Sequence[RLECy], boolfuncs: Iterable[int]):
-        cdef RLECy result = rles[0].clone()
-        cdef RLECy tmp = RLECy()
-        cdef RLECy rle
-        cdef int boolfunc
+        cdef siz n = len(rles)
+        cdef const RLE **rles_ptr = <const RLE **> malloc(n * sizeof(RLE*))
+        if not rles_ptr:
+            raise MemoryError("Failed to allocate memory for RLE pointers")
 
-        for rle, boolfunc in zip(rles[1:], boolfuncs):
-            rleMerge2(&tmp.r, &rle.r, &result.r, boolfunc & 0xffffffff)
-            tmp, result = result, tmp
-        return result
+        cdef RLECy rle
+        cdef siz i = 0
+        for rle in rles:
+            rles_ptr[i] = &rle.r
+            i += 1
+
+        cdef np.ndarray[np.uint32_t, ndim=1] bfs = np.ascontiguousarray(boolfuncs, dtype=np.uint32)
+        cdef RLECy result = RLECy()
+        try:
+            rleMergeMultiFunc(rles_ptr, &result.r, n, &bfs[0])
+            return result
+        finally:
+            free(rles_ptr)
 
 
     @staticmethod
     def merge_many_singlefunc(rles: Sequence[RLECy], boolfunc: int):
-        cdef RLECy result = rles[0].clone()
-        cdef RLECy tmp = RLECy()
-        cdef RLECy rle
+        cdef siz n = len(rles)
+        cdef const RLE **rles_ptr = <const RLE **> malloc(n * sizeof(RLE*))
+        if not rles_ptr:
+            raise MemoryError("Failed to allocate memory for RLE pointers")
 
-        for rle in rles[1:]:
-            rleMerge2(&result.r, &rle.r, &tmp.r, boolfunc)
-            tmp, result = result, tmp
-            #rleMergePtr
-        return result
+        cdef RLECy rle
+        cdef siz i = 0
+        for rle in rles:
+            rles_ptr[i] = &rle.r
+            i += 1
+
+        cdef RLECy result = RLECy()
+        try:
+            rleMergePtr(rles_ptr, &result.r, n, boolfunc)
+            return result
+        finally:
+            free(rles_ptr)
 
 
     @staticmethod
@@ -795,11 +811,14 @@ cdef class RLECy:
 
     cpdef to_dict(self, zlevel: Optional[int] = None):
         cdef char *c_string = rleToString(&self.r)
-        if zlevel is not None:
-            compressed = zlib.compress(memoryview(c_string), zlevel)
-            return {"size": [self.r.h, self.r.w], "zcounts": compressed}
-        else:
-            return {"size": [self.r.h, self.r.w], "counts": bytes(c_string)}
+        try:
+            if zlevel is not None:
+                compressed = zlib.compress(memoryview(c_string), zlevel)
+                return {"size": [self.r.h, self.r.w], "zcounts": compressed}
+            else:
+                return {"size": [self.r.h, self.r.w], "counts": bytes(c_string)}
+        finally:
+            free(c_string)
 
     def iou(self, other: RLECy) -> float:
         cdef double o
@@ -821,15 +840,9 @@ cdef class RLECy:
 
         try:
             for i, rle in enumerate(dt):
-                dt_c[i].m = rle.r.m
-                dt_c[i].h = rle.r.h
-                dt_c[i].w = rle.r.w
-                dt_c[i].cnts = rle.r.cnts
+                rleBorrow(&dt_c[i], rle.r.h, rle.r.w, rle.r.m, rle.r.cnts)
             for i, rle in enumerate(gt):
-                gt_c[i].m = rle.r.m
-                gt_c[i].h = rle.r.h
-                gt_c[i].w = rle.r.w
-                gt_c[i].cnts = rle.r.cnts
+                rleBorrow(&gt_c[i], rle.r.h, rle.r.w, rle.r.m, rle.r.cnts)
 
             rleIou(dt_c, gt_c, len(dt), len(gt), NULL, &o[0])
             return np.array(o).reshape(len(gt), len(dt))
@@ -854,6 +867,7 @@ cdef class RLECy:
         cdef np.ndarray[np.uint8_t, ndim=2, mode='fortran'] labelmap = np.zeros(
             rles[0].shape, dtype=np.uint8, order='F')
         rlesToLabelMapZeroInit(rles_ptr, &labelmap[0, 0], len(rles))
+        free(rles_ptr)
         return labelmap
 
 
