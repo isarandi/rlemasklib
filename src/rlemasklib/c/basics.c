@@ -2,6 +2,7 @@
 #include <string.h> // for memcpy
 #include <stdbool.h> // for bool
 #include <stddef.h> // for ptrdiff_t
+#include <assert.h> // for assert
 #include "basics.h"
 
 
@@ -27,6 +28,14 @@ uint *rleFrCnts(RLE *R, siz h, siz w, siz m, uint *cnts) {
     return R->cnts;
 }
 
+void rleBorrow(RLE *R, siz h, siz w, siz m, uint *cnts) {
+    R->h = h;
+    R->w = w;
+    R->m = m;
+    R->cnts = cnts;
+    R->alloc = NULL;
+}
+
 void rleCopy(const RLE *R, RLE *M) {
     rleFrCnts(M, R->h, R->w, R->m, R->cnts);
 }
@@ -38,6 +47,7 @@ void rleFree(RLE *R) {
 }
 
 static uint *rleRealloc(RLE *R, siz m) {
+    assert(rleOwnsData(R) && "Cannot realloc borrowed RLE");
     R->m = m;
     ptrdiff_t diff = R->cnts - R->alloc;
     R->alloc = realloc(R->alloc, sizeof(uint) * (m + diff));
@@ -51,7 +61,7 @@ void rleMoveTo(RLE *R, RLE *M) {
     memset(R, 0, sizeof(RLE));
 }
 
-static void rleSwap(RLE *R, RLE *M) {
+void rleSwap(RLE *R, RLE *M) {
     RLE tmp;
     memcpy(&tmp, R, sizeof(RLE));
     memcpy(R, M, sizeof(RLE));

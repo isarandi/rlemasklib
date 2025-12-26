@@ -32,6 +32,17 @@ uint *rleInit(RLE *R, siz h, siz w, siz m);
 // Init by copying from existing runlength counts
 uint *rleFrCnts(RLE *R, siz h, siz w, siz m, uint *cnts);
 
+// Initialize a borrowed (non-owning) RLE that wraps existing counts.
+// The RLE does not own the memory and rleFree will not free it.
+// Borrowed RLEs are read-only views and must not be used with in-place operations.
+void rleBorrow(RLE *R, siz h, siz w, siz m, uint *cnts);
+
+// Check if the RLE owns its data (alloc != NULL).
+// Borrowed RLEs (created with rleBorrow) do not own their data.
+static inline bool rleOwnsData(const RLE *R) {
+    return R->alloc != NULL;
+}
+
 // Move the allocated pointer from one RLE to another and copy h, w, m.
 // This does not copy, but R's cnts will be set to NULL, so the data is logically transferred to M.
 void rleMoveTo(RLE *R, RLE *M);
@@ -69,4 +80,4 @@ static uint *rleRealloc(RLE *R, siz m);
 
 // Swap the contents of two RLEs, i.e. the pointers and the h, w, m values.
 // This is useful in double buffer ping-pong style algorithms, e.g. rleMerge.
-static void rleSwap(RLE *R, RLE *M);
+void rleSwap(RLE *R, RLE *M);
