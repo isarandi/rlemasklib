@@ -325,7 +325,7 @@ def iou(dt, gt, pyiscrowd):
                 objs = objs.reshape((objs[0], 1))
             # check if it's Nx4 bbox
             if not len(objs.shape) == 2 or not objs.shape[1] == 4:
-                raise Exception(
+                raise TypeError(
                     'numpy ndarray input is only for *bounding boxes* and should have Nx4 dimension')
             objs = objs.astype(np.double)
         elif type(objs) == list:
@@ -342,9 +342,9 @@ def iou(dt, gt, pyiscrowd):
             elif isrle:
                 objs = _from_leb128_dicts(objs)
             else:
-                raise Exception('list input can be bounding box (Nx4) or RLEs ([RLE])')
+                raise TypeError('list input can be bounding box (Nx4) or RLEs ([RLE])')
         else:
-            raise Exception(
+            raise TypeError(
                 'unrecognized type.  The following type: RLEs (rle), np.ndarray (box), and list (box) are supported.')
         return objs
     def _rleIou(RLEs dt, RLEs gt, np.ndarray[np.uint8_t, ndim=1] iscrowd, siz m, siz n,
@@ -374,7 +374,7 @@ def iou(dt, gt, pyiscrowd):
     if m == 0 or n == 0:
         return []
     if not type(dt) == type(gt):
-        raise Exception(
+        raise TypeError(
             'The dt and gt should have the same data type, either RLEs, list or np.ndarray')
 
     # define local variables
@@ -386,7 +386,7 @@ def iou(dt, gt, pyiscrowd):
     elif type(dt) == np.ndarray:
         _iouFun = _bbIou
     else:
-        raise Exception('input data type not allowed.')
+        raise TypeError('input data type not allowed.')
     _iou = <double *> malloc(m * n * sizeof(double))
     iou = np.zeros((m * n,), dtype=np.double)
     shape[0] = <np.npy_intp> m * n
@@ -453,7 +453,7 @@ def frPyObjects(pyobj, h, w):
     elif type(pyobj) == dict and 'counts' in pyobj and 'size' in pyobj:
         objs = frUncompressedRLE([pyobj])[0]
     else:
-        raise Exception('input type is not supported.')
+        raise TypeError('input type is not supported.')
     return objs
 
 def connectedComponents(rleObj, connectivity=4, min_size=1):

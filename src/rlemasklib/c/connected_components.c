@@ -188,7 +188,6 @@ void rleRemoveSmallConnectedComponentsInplace(RLE *R_in, siz min_size, int conne
 
     siz m = R->m;
     siz h = R->h;
-    siz w = R->w;
     uint *cnts = R->cnts;
 
     // initially each run of 1s is a separate component
@@ -266,7 +265,6 @@ void rleLargestConnectedComponentInplace(RLE *R_in, int connectivity) {
 
     siz m = R->m;
     siz h = R->h;
-    siz w = R->w;
     uint *cnts = R->cnts;
 
     // initially each run of 1s is a separate component

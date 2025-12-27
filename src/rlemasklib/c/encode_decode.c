@@ -62,16 +62,6 @@ void rleEncodeThresh128(RLE *R, const byte *M, siz h, siz w, siz n) {
     }
 }
 
-//void rleDecodeUninitialized(const RLE *R, byte *M, siz n) {
-//    for (siz i = 0; i < n; i++) {
-//        for (siz j = 0; j < R[i].m; j++) {
-//            uint cnt = R[i].cnts[j];
-//            memset(M, j%2, cnt);
-//            M += cnt;
-//        }
-//    }
-//}
-
 bool rleDecode(const RLE *R, byte *M, siz n, byte value) {
     // M must be zeroed out in advance
     if (value == 0) {
