@@ -25,7 +25,7 @@ jobs:
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.22
         env:
-          CIBW_BUILD: cp39-* cp310-* cp311-* cp312-* cp313-*
+          CIBW_BUILD: cp38-* cp39-* cp310-* cp311-* cp312-* cp313-*
           CIBW_SKIP: "*-musllinux_* pp*"
           CIBW_TEST_COMMAND: python -c "import rlemasklib; print(rlemasklib.__version__)"
 

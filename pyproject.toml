@@ -45,13 +45,33 @@ classifiers = [
     "Programming Language :: Python",
     "Programming Language :: C",
     "Programming Language :: Cython",
-    "Operating System :: POSIX :: Linux"
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows"
 ]
 
 dependencies = [
     "numpy"
 ]
 
+[project.optional-dependencies]
+docs = [
+    "sphinx",
+    "sphinxcontrib-bibtex",
+    "sphinx-autoapi",
+    "sphinx-autobuild",
+    "sphinx-autodoc-typehints",
+    "sphinxcontrib-prettyspecialmethods",
+    "sphinx-autodoc-napoleon-typehints",
+    "sphinx-codeautolink",
+    "sphinx-rtd-theme",
+    "pydata-sphinx-theme",
+    "sphinxcontrib-napoleon",
+    "Cython>=3.0.0",
+    "numpy",
+    "setuptools-scm",
+    "toml"
+]
 test = [
     "pytest",
     "numpy",
@@ -64,6 +84,7 @@ test-headless = [
     "hypothesis",
     "opencv-python-headless"
 ]
+
 [project.urls]
 Homepage = "https://github.com/isarandi/rlemasklib"
 Repository = "https://github.com/isarandi/rlemasklib"
