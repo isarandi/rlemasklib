@@ -501,45 +501,50 @@ static void rleLeftRightContours(const RLE *R, RLE *R_left, RLE *R_right) {
 }
 
 void rleLargestInteriorRectangleAroundCenter(
-    const RLE *R, double* rect_out, uint cy, uint cx, double aspect_ratio) {
+    const RLE *R, double* rect_out, double cy, double cx, double aspect_ratio) {
     // If there are no foreground pixels, return zeros
     if (R->m <= 1 || R->h == 0 || R->w == 0) {
         rect_out[0] = rect_out[1] = rect_out[2] = rect_out[3] = 0;
         return;
     }
+
+    // Round to nearest integer center for the algorithm (integer-centered convention)
+    uint icy = (uint)round(cy);
+    uint icx = (uint)round(cx);
+
     // If the center is in the background, return zeros
-    if (rleGet(R, cy, cx) == 0) {
+    if (rleGet(R, icy, icx) == 0) {
         rect_out[0] = rect_out[1] = rect_out[2] = rect_out[3] = 0;
         return;
     }
 
     uint bbox[4];
     rleToUintBbox(R, bbox);
-    siz histsize = uintMin(cx - bbox[0] + 1, bbox[0] + bbox[2] - cx);
+    siz histsize = uintMin(icx - bbox[0] + 1, bbox[0] + bbox[2] - icx);
     uint *hist = malloc(histsize * sizeof(uint));
-    uint max_hist = uintMin(cy - bbox[1], bbox[1] + bbox[3] - 1 - cy);
+    uint max_hist = uintMin(icy - bbox[1], bbox[1] + bbox[3] - 1 - icy);
     for (siz i = 0; i < histsize; i++) {
         hist[i] = max_hist;
     }
     uint xdist_earliest_zero = histsize;
 
     uint r = 0;
-    uint next_target = (cx - histsize + 1) * R->h + cy;
+    uint next_target = (icx - histsize + 1) * R->h + icy;
     for (siz j=0; j < R->m; j++) {
         uint cnt = R->cnts[j];
         uint r_end = r + cnt;
-        if (r_end > next_target) { // this is the run that contains the next pixel in row cy
+        if (r_end > next_target) { // this is the run that contains the next pixel in row icy
             uint xstart = r / R->h;
             uint xlastcol = (r_end - 1) / R->h;
             if (xstart == xlastcol) { // the run is within a single column
-                uint xdist = uintAbsDiff(cx, xstart);
+                uint xdist = uintAbsDiff(icx, xstart);
                 if (xdist < xdist_earliest_zero) {
                     if (j % 2 == 0) { // run of zeros
                         xdist_earliest_zero = xdist;
                     } else {
                         uint ystart = r % R->h;
                         uint ylast = ystart + cnt - 1;
-                        uint value = uintMin(cy - ystart, ylast - cy);
+                        uint value = uintMin(icy - ystart, ylast - icy);
                         if (value < hist[xdist]) {
                             hist[xdist] = value;
                         }
@@ -547,45 +552,45 @@ void rleLargestInteriorRectangleAroundCenter(
                 }
                 next_target += R->h;
             } else {
-                // this many pixels of row cy are in this run
+                // this many pixels of row icy are in this run
                 uint runwidth = (r_end - next_target) / R->h + 1;
                 if (j % 2 == 0) { // run of zeros
                     // its enough to set the smallest distance to 0
-                    // the smallest distance depends on whether the run is to left or right of cx
-                    // cx cannot be part of a 0s run -- we checked that at the start
-                    uint xfirst_cy = next_target / R->h;
-                    uint xlast_cy = (r_end - cy) / R->h;
-                    uint xdist = xlast_cy < cx ? cx - xlast_cy : xfirst_cy - cx;
+                    // the smallest distance depends on whether the run is to left or right of icx
+                    // icx cannot be part of a 0s run -- we checked that at the start
+                    uint xfirst_icy = next_target / R->h;
+                    uint xlast_icy = (r_end - icy) / R->h;
+                    uint xdist = xlast_icy < icx ? icx - xlast_icy : xfirst_icy - icx;
                     if (xdist < xdist_earliest_zero) {
                         xdist_earliest_zero = xdist;
                     }
                 } else { // run of 1s
                     uint ystart = r % R->h;
-                    if (ystart <= cy) {  // ystart might be after cy
+                    if (ystart <= icy) {  // ystart might be after icy
                         // first column -- it only has a top limit at ystart
-                        uint xdist = uintAbsDiff(cx, xstart);
+                        uint xdist = uintAbsDiff(icx, xstart);
                         if (xdist < xdist_earliest_zero) {
-                            uint value = cy - ystart;
+                            uint value = icy - ystart;
                             if (value < hist[xdist]) {
                                 hist[xdist] = value;
                             }
                         }
                     }
                     uint ylast = (r_end - 1) % R->h;
-                    if (ylast >= cy) {  // ylast might be before cy
+                    if (ylast >= icy) {  // ylast might be before icy
                         // last column -- it only has a bottom limit at ylast
-                        uint xdist = uintAbsDiff(cx, xlastcol);
+                        uint xdist = uintAbsDiff(icx, xlastcol);
                         if (xdist < xdist_earliest_zero) {
-                            uint value = ylast - cy;
+                            uint value = ylast - icy;
                             if (value < hist[xdist]) {
                                 hist[xdist] = value;
                             }
                         }
                     }
                 }
-                next_target += R->h * runwidth; // the serial position of the next y=cy pixel
+                next_target += R->h * runwidth; // the serial position of the next y=icy pixel
             }
-            if (next_target / R->h >= cx + xdist_earliest_zero) {
+            if (next_target / R->h >= icx + xdist_earliest_zero) {
                 // if we have reached the last column where a nonzero column can be found, we stop
                 break;
             }
@@ -635,14 +640,61 @@ void rleLargestInteriorRectangleAroundCenter(
     }
 
     free(hist);
-    double best_height = best_hist * 2 + 1;
-    double best_width = best_area / best_height;
-    double best_x = cx - (best_width - 1) / 2;
-    double best_y = cy - best_hist;
-    rect_out[0] = best_x;
-    rect_out[1] = best_y;
-    rect_out[2] = best_width;
-    rect_out[3] = best_height;
+
+    // Compute rectangle from integer-centered algorithm
+    double h = best_hist * 2 + 1;
+    double w = best_area / h;
+    double x = icx - (w - 1) / 2;
+    double y = icy - best_hist;
+
+    // Adjust for exact float center
+    if (aspect_ratio > 0) {
+        // With aspect ratio: find largest rect with exact center and aspect ratio
+        // that fits within the integer-centered rectangle
+        double w_max = fmin(2 * (cx - x) + 1, 2 * (x + w - cx) - 1);
+        double h_max = fmin(2 * (cy - y) + 1, 2 * (y + h - cy) - 1);
+
+        if (w_max <= 0 || h_max <= 0) {
+            rect_out[0] = rect_out[1] = rect_out[2] = rect_out[3] = 0;
+            return;
+        }
+
+        double h_new = fmin(w_max / aspect_ratio, h_max);
+        double w_new = aspect_ratio * h_new;
+        rect_out[0] = cx - (w_new - 1) / 2;
+        rect_out[1] = cy - (h_new - 1) / 2;
+        rect_out[2] = w_new;
+        rect_out[3] = h_new;
+    } else {
+        // No aspect ratio: adjust for exact center only by shrinking
+        double current_cx = x + (w - 1) / 2;
+        double current_cy = y + (h - 1) / 2;
+        double dx = cx - current_cx;
+        double dy = cy - current_cy;
+
+        if (dx > 0) {
+            x += 2 * dx;
+            w -= 2 * dx;
+        } else {
+            w += 2 * dx;  // dx negative, shrinks width from right
+        }
+
+        if (dy > 0) {
+            y += 2 * dy;
+            h -= 2 * dy;
+        } else {
+            h += 2 * dy;  // dy negative, shrinks height from bottom
+        }
+
+        // Clamp to non-negative
+        if (w < 0) w = 0;
+        if (h < 0) h = 0;
+
+        rect_out[0] = x;
+        rect_out[1] = y;
+        rect_out[2] = w;
+        rect_out[3] = h;
+    }
 }
 
 static uint uintAbsDiff(uint a, uint b) {

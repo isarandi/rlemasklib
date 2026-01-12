@@ -120,7 +120,8 @@ cdef extern from "iou_nms.h" nogil:
 cdef extern from "largest_interior_rectangle.h" nogil:
     void rleLargestInteriorRectangle(const RLE *R, uint *rect)
     void rleLargestInteriorRectangleAspect(const RLE *R, double *rect, double aspect_ratio)
-    void rleLargestInteriorRectangleAroundCenter(const RLE *R, double *rect, uint cy, uint cx, double aspect_ratio)
+    void rleLargestInteriorRectangleAroundCenter(const RLE *R, double *rect, double cy, double cx,
+                                                 double aspect_ratio)
 
 cdef extern from "warp_affine.h" nogil:
     void rleWarpAffine(const RLE *R, RLE *M, siz h_out, siz w_out, double *H)
