@@ -233,6 +233,8 @@ def encode_C_order_sparse(
 # decode mask from compressed list of RLE string or RLEs object
 def decode(rleObjs):
     cdef RLEs Rs = _from_leb128_dicts(rleObjs)
+    if Rs._n == 0:
+        return np.empty((0, 0, 0), dtype=np.uint8)
     h, w, n = Rs._R[0].h, Rs._R[0].w, Rs._n
     masks = Masks(h, w, n)
     cdef bool success = rleDecode(<RLE *> Rs._R, masks._mask, n, 1)
