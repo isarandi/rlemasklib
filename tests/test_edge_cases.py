@@ -11,6 +11,7 @@ from rlemasklib.boolfunc import BoolFunc
 # Empty and Full Masks
 # =============================================================================
 
+
 class TestEmptyFullMasks:
     def test_empty_mask_area(self):
         """Empty mask should have area 0."""
@@ -25,24 +26,24 @@ class TestEmptyFullMasks:
     def test_empty_mask_any(self):
         """Empty mask any() should be False."""
         rle = RLEMask.zeros((5, 5))
-        assert rle.any() == False
+        assert not rle.any()
 
     def test_full_mask_all(self):
         """Full mask all() should be True."""
         rle = RLEMask.ones((5, 5))
-        assert rle.all() == True
+        assert rle.all()
 
     def test_empty_mask_complement(self):
         """Complement of empty mask should be full."""
         rle = RLEMask.zeros((5, 5))
         comp = ~rle
-        assert comp.all() == True
+        assert comp.all()
 
     def test_full_mask_complement(self):
         """Complement of full mask should be empty."""
         rle = RLEMask.ones((5, 5))
         comp = ~rle
-        assert comp.any() == False
+        assert not comp.any()
 
     def test_empty_mask_dilate(self):
         """Dilating empty mask should remain empty."""
@@ -89,6 +90,7 @@ class TestEmptyFullMasks:
 # =============================================================================
 # Single Pixel Masks
 # =============================================================================
+
 
 class TestSinglePixelMasks:
     def test_single_pixel_1x1(self):
@@ -141,6 +143,7 @@ class TestSinglePixelMasks:
 # Extreme Shapes
 # =============================================================================
 
+
 class TestExtremeShapes:
     def test_single_row(self):
         """1xN mask should work."""
@@ -183,6 +186,7 @@ class TestExtremeShapes:
 # =============================================================================
 # Boundary Conditions
 # =============================================================================
+
 
 class TestBoundaryConditions:
     def test_crop_at_edge(self):
@@ -250,6 +254,7 @@ class TestBoundaryConditions:
 # Checkerboard and Complex Patterns
 # =============================================================================
 
+
 class TestComplexPatterns:
     def test_checkerboard_encode_decode(self):
         """Checkerboard pattern (worst case RLE) should work."""
@@ -296,6 +301,7 @@ class TestComplexPatterns:
 # Error Handling
 # =============================================================================
 
+
 class TestErrorHandling:
     def test_different_shape_union(self):
         """Union of different-shaped masks should raise."""
@@ -331,12 +337,12 @@ class TestErrorHandling:
     def test_invalid_order(self):
         """from_counts with invalid order should raise."""
         with pytest.raises(ValueError):
-            RLEMask.from_counts([9], shape=(3, 3), order='X')
+            RLEMask.from_counts([9], shape=(3, 3), order="X")
 
     def test_decode_wrong_size(self):
         """Decoding with wrong size in dict should raise."""
         rle = rlemasklib.encode(np.eye(3, dtype=np.uint8))
-        rle['size'] = [2, 2]
+        rle["size"] = [2, 2]
         with pytest.raises(ValueError):
             rlemasklib.decode(rle)
 
@@ -351,6 +357,7 @@ class TestErrorHandling:
 # Functional API Edge Cases
 # =============================================================================
 
+
 class TestFunctionalEdgeCases:
     def test_area_empty_list(self):
         """area of empty list should return empty."""
@@ -362,7 +369,7 @@ class TestFunctionalEdgeCases:
         mask = np.eye(3, dtype=np.uint8)
         rle = rlemasklib.encode(mask)
         comp = rlemasklib.complement(rle)
-        assert 'size' in comp  # Should return single dict
+        assert "size" in comp  # Should return single dict
 
     def test_complement_list(self):
         """complement of list of masks."""
@@ -376,7 +383,7 @@ class TestFunctionalEdgeCases:
         mask = np.ones((10, 10), dtype=np.uint8)
         rle = rlemasklib.encode(mask)
         cropped = rlemasklib.crop(rle, [2, 2, 5, 5])
-        assert cropped['size'] == [5, 5]
+        assert cropped["size"] == [5, 5]
 
     def test_to_bbox_empty_mask(self):
         """to_bbox of empty mask."""
@@ -398,6 +405,7 @@ class TestFunctionalEdgeCases:
 # Serialization Edge Cases
 # =============================================================================
 
+
 class TestSerializationEdgeCases:
     def test_to_dict_roundtrip(self):
         """to_dict -> from_dict should preserve mask."""
@@ -412,7 +420,7 @@ class TestSerializationEdgeCases:
         mask = np.random.randint(0, 2, (20, 20), dtype=np.uint8)
         rle1 = RLEMask.from_array(mask)
         d = rle1.to_dict(zlevel=-1)
-        assert 'zcounts' in d
+        assert "zcounts" in d
         rle2 = RLEMask.from_dict(d)
         assert rle1 == rle2
 
@@ -436,6 +444,7 @@ class TestSerializationEdgeCases:
 # =============================================================================
 # Numeric Stability
 # =============================================================================
+
 
 class TestNumericStability:
     def test_iou_identical(self):
@@ -478,6 +487,7 @@ class TestNumericStability:
 # Memory and Performance Edge Cases
 # =============================================================================
 
+
 class TestMemoryPerformance:
     def test_large_mask_operations(self):
         """Operations on large masks should complete."""
@@ -514,6 +524,7 @@ class TestMemoryPerformance:
 # =============================================================================
 # Inplace Operation Edge Cases
 # =============================================================================
+
 
 class TestInplaceEdgeCases:
     def test_inplace_on_copy(self):

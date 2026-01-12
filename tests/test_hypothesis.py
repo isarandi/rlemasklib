@@ -12,8 +12,9 @@ from rlemasklib.oop import RLEMask
 slow_settings = settings(
     max_examples=100,
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.data_too_large],
-    deadline=None
+    deadline=None,
 )
+
 
 # Strategies for generating test data
 @st.composite
@@ -23,7 +24,7 @@ def mask_array(draw, max_h=30, max_w=30, min_h=0, min_w=0):
     w = draw(st.integers(min_value=min_w, max_value=max_w))
     if h == 0 or w == 0:
         return np.zeros((h, w), dtype=np.uint8)
-    data = draw(st.lists(st.integers(0, 1), min_size=h*w, max_size=h*w))
+    data = draw(st.lists(st.integers(0, 1), min_size=h * w, max_size=h * w))
     return np.array(data, dtype=np.uint8).reshape(h, w)
 
 
@@ -34,10 +35,12 @@ def mask_pair(draw, max_h=30, max_w=30, min_h=0, min_w=0):
     w = draw(st.integers(min_value=min_w, max_value=max_w))
     if h == 0 or w == 0:
         return np.zeros((h, w), dtype=np.uint8), np.zeros((h, w), dtype=np.uint8)
-    data1 = draw(st.lists(st.integers(0, 1), min_size=h*w, max_size=h*w))
-    data2 = draw(st.lists(st.integers(0, 1), min_size=h*w, max_size=h*w))
-    return (np.array(data1, dtype=np.uint8).reshape(h, w),
-            np.array(data2, dtype=np.uint8).reshape(h, w))
+    data1 = draw(st.lists(st.integers(0, 1), min_size=h * w, max_size=h * w))
+    data2 = draw(st.lists(st.integers(0, 1), min_size=h * w, max_size=h * w))
+    return (
+        np.array(data1, dtype=np.uint8).reshape(h, w),
+        np.array(data2, dtype=np.uint8).reshape(h, w),
+    )
 
 
 class TestEncodeDecodeHypothesis:
@@ -178,7 +181,7 @@ class TestCropHypothesis:
 
         rle = RLEMask.from_array(mask)
         result = np.array(rle.crop([x, y, cw, ch]))
-        expected = mask[y:y+ch, x:x+cw]
+        expected = mask[y : y + ch, x : x + cw]
         np.testing.assert_array_equal(result, expected)
 
     @given(mask=mask_array(), data=st.data())
@@ -198,9 +201,13 @@ class TestCropHypothesis:
 
 
 class TestPadHypothesis:
-    @given(mask=mask_array(),
-           top=st.integers(0, 10), bottom=st.integers(0, 10),
-           left=st.integers(0, 10), right=st.integers(0, 10))
+    @given(
+        mask=mask_array(),
+        top=st.integers(0, 10),
+        bottom=st.integers(0, 10),
+        left=st.integers(0, 10),
+        right=st.integers(0, 10),
+    )
     @slow_settings
     def test_pad_zeros(self, mask, top, bottom, left, right):
         rle = RLEMask.from_array(mask)
@@ -208,9 +215,13 @@ class TestPadHypothesis:
         expected = np.pad(mask, ((top, bottom), (left, right)), constant_values=0)
         np.testing.assert_array_equal(result, expected)
 
-    @given(mask=mask_array(),
-           top=st.integers(0, 10), bottom=st.integers(0, 10),
-           left=st.integers(0, 10), right=st.integers(0, 10))
+    @given(
+        mask=mask_array(),
+        top=st.integers(0, 10),
+        bottom=st.integers(0, 10),
+        left=st.integers(0, 10),
+        right=st.integers(0, 10),
+    )
     @slow_settings
     def test_pad_ones(self, mask, top, bottom, left, right):
         rle = RLEMask.from_array(mask)
@@ -243,8 +254,9 @@ class TestShiftHypothesis:
 
 
 class TestTileHypothesis:
-    @given(mask=mask_array(max_h=10, max_w=10),
-           nh=st.integers(1, 5), nw=st.integers(1, 5))
+    @given(
+        mask=mask_array(max_h=10, max_w=10), nh=st.integers(1, 5), nw=st.integers(1, 5)
+    )
     @slow_settings
     def test_tile(self, mask, nh, nw):
         rle = RLEMask.from_array(mask)
@@ -254,8 +266,9 @@ class TestTileHypothesis:
 
 
 class TestRepeatHypothesis:
-    @given(mask=mask_array(max_h=10, max_w=10),
-           rh=st.integers(1, 5), rw=st.integers(1, 5))
+    @given(
+        mask=mask_array(max_h=10, max_w=10), rh=st.integers(1, 5), rw=st.integers(1, 5)
+    )
     @slow_settings
     def test_repeat(self, mask, rh, rw):
         rle = RLEMask.from_array(mask)
@@ -289,8 +302,11 @@ class TestBboxHypothesis:
 
 
 class TestResizeHypothesis:
-    @given(mask=mask_array(min_h=1, min_w=1, max_h=20, max_w=20),
-           new_h=st.integers(1, 30), new_w=st.integers(1, 30))
+    @given(
+        mask=mask_array(min_h=1, min_w=1, max_h=20, max_w=20),
+        new_h=st.integers(1, 30),
+        new_w=st.integers(1, 30),
+    )
     @slow_settings
     def test_resize_shape(self, mask, new_h, new_w):
         rle = RLEMask.from_array(mask)
@@ -345,7 +361,7 @@ class TestConnectedComponentsHypothesis:
 
         if len(components) > 1:
             for i, c1 in enumerate(components):
-                for c2 in components[i+1:]:
+                for c2 in components[i + 1 :]:
                     assert (c1 & c2).area() == 0
 
 
@@ -372,9 +388,9 @@ class TestLargestInteriorRectangleHypothesis:
     def test_largest_interior_rectangle_inside_mask(self, mask):
         assume(mask.sum() > 0)
         rle = RLEMask.from_array(mask)
-        x, y, w, h = rle.largest_interior_rectangle()
+        x, y, w, h = rle.largest_interior_rectangle().astype(int)
 
         if w > 0 and h > 0:
             # The rectangle should be inside the mask
-            rect_area = mask[y:y+h, x:x+w]
+            rect_area = mask[y : y + h, x : x + w]
             assert rect_area.sum() == w * h  # All ones inside rectangle

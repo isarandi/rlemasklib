@@ -72,7 +72,7 @@ def test_slicingc():
 
 
 def test_from_dictc():
-    d1 = RLEMask.from_dict({'ucounts': [0, 1, 2, 1], 'size': [2, 2]})
+    d1 = RLEMask.from_dict({"ucounts": [0, 1, 2, 1], "size": [2, 2]})
     assert np.all(np.array(d1) == np.eye(2))
 
     d2 = RLEMask.from_array(np.eye(3))
@@ -136,15 +136,21 @@ def test_min_pool():
 def test_avg_pool():
     mask = np.array([[0, 1], [1, 1]])
     rle = RLEMask.from_array(mask)
-    assert np.all(np.array(rle.avg_pool2x2()) == (np.mean(mask, keepdims=True) >= 0.5).astype(int))
+    assert np.all(
+        np.array(rle.avg_pool2x2()) == (np.mean(mask, keepdims=True) >= 0.5).astype(int)
+    )
 
     mask = np.array([[0, 1], [1, 0]])
     rle = RLEMask.from_array(mask)
-    assert np.all(np.array(rle.avg_pool2x2()) == (np.mean(mask, keepdims=True) >= 0.5).astype(int))
+    assert np.all(
+        np.array(rle.avg_pool2x2()) == (np.mean(mask, keepdims=True) >= 0.5).astype(int)
+    )
 
     mask = np.array([[0, 1], [0, 0]])
     rle = RLEMask.from_array(mask)
-    assert np.all(np.array(rle.avg_pool2x2()) == (np.mean(mask, keepdims=True) >= 0.5).astype(int))
+    assert np.all(
+        np.array(rle.avg_pool2x2()) == (np.mean(mask, keepdims=True) >= 0.5).astype(int)
+    )
 
 
 def test_remove_small_compc():
@@ -214,7 +220,15 @@ def test_merge_multibool():
 
     rle = RLEMask.merge_many_custom(
         [rle1, rle2, rle3, rle1, rle2, rle3, rle1, rle2, rle3],
-        lambda a1, a2, a3, a4, a5, a6, a7, a8, a9: a1 | a2 | a3 | a4 | a5 | a6 | a7 | a8 | a9,
+        lambda a1, a2, a3, a4, a5, a6, a7, a8, a9: a1
+        | a2
+        | a3
+        | a4
+        | a5
+        | a6
+        | a7
+        | a8
+        | a9,
     )
     assert np.all(np.array(rle) == np.array([[1, 1, 1], [1, 1, 1], [1, 1, 1]]))
 
@@ -229,7 +243,15 @@ def test_merge_multibool():
     assert np.all(np.array(rle) == np.array([[0, 1, 1], [1, 1, 1], [1, 0, 1]]))
 
     mergefun = RLEMask.make_merge_function(
-        lambda a1, a2, a3, a4, a5, a6, a7, a8, a9: a1 | a2 | a3 | a4 | a5 | a6 | a7 | a8 | a9
+        lambda a1, a2, a3, a4, a5, a6, a7, a8, a9: a1
+        | a2
+        | a3
+        | a4
+        | a5
+        | a6
+        | a7
+        | a8
+        | a9
     )
     rle = mergefun(rle1, rle2, rle3, rle1, rle2, rle3, rle1, rle2, rle3)
     assert np.all(np.array(rle) == np.array([[1, 1, 1], [1, 1, 1], [1, 1, 1]]))
@@ -246,7 +268,7 @@ def test_circle():
     rle2 = RLEMask.from_polygon(poly, imshape=(500, 500))
 
     mask = np.array(rle2 - rle)
-    imageio.imwrite('/tmp/circle.png', mask * 255)
+    imageio.imwrite("/tmp/circle.png", mask * 255)
 
 
 def test_iou():
@@ -260,14 +282,13 @@ def test_iou():
     rle4 = RLEMask.from_array(mask4)
 
     iou = RLEMask.iou_matrix([rle1, rle2], [rle3, rle4])
-    iou2 = np.array([[rle1.iou(rle3), rle1.iou(rle4)], [rle2.iou(rle3), rle2.iou(rle4)]])
+    iou2 = np.array(
+        [[rle1.iou(rle3), rle1.iou(rle4)], [rle2.iou(rle3), rle2.iou(rle4)]]
+    )
     assert np.all(iou == iou2)
 
     iou = rle1.iou(rle1)
     assert iou == 1.0
-
-
-import time
 
 
 def test_transpose():
@@ -397,9 +418,14 @@ def test_shift():
 
 
 def test_morph():
-
     kernel5x5 = np.array(
-        [[0, 1, 1, 1, 0], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [0, 1, 1, 1, 0]],
+        [
+            [0, 1, 1, 1, 0],
+            [1, 1, 1, 1, 1],
+            [1, 1, 1, 1, 1],
+            [1, 1, 1, 1, 1],
+            [0, 1, 1, 1, 0],
+        ],
         dtype=np.uint8,
     )
 
@@ -409,22 +435,30 @@ def test_morph():
         mask = np.random.randint(0, 2, (h, w)).astype(np.uint8)
         rle = RLEMask.from_array(mask)
         rle_dilated = rle.dilate3x3(connectivity=4)
-        mask_dilate = cv2.dilate(mask, np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]], dtype=np.uint8))
+        mask_dilate = cv2.dilate(
+            mask, np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]], dtype=np.uint8)
+        )
         rle_dilate_correct = RLEMask.from_array(mask_dilate)
         assert rle_dilated == rle_dilate_correct
 
         rle_eroded = rle.erode3x3(connectivity=4)
-        mask_erode = cv2.erode(mask, np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]], dtype=np.uint8))
+        mask_erode = cv2.erode(
+            mask, np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]], dtype=np.uint8)
+        )
         rle_erode_correct = RLEMask.from_array(mask_erode)
         assert rle_eroded == rle_erode_correct
 
         rle_dilated = rle.dilate3x3(connectivity=8)
-        mask_dilate = cv2.dilate(mask, np.array([[1, 1, 1], [1, 1, 1], [1, 1, 1]], dtype=np.uint8))
+        mask_dilate = cv2.dilate(
+            mask, np.array([[1, 1, 1], [1, 1, 1], [1, 1, 1]], dtype=np.uint8)
+        )
         rle_dilate_correct = RLEMask.from_array(mask_dilate)
         assert rle_dilated == rle_dilate_correct
 
         rle_eroded = rle.erode3x3(connectivity=8)
-        mask_erode = cv2.erode(mask, np.array([[1, 1, 1], [1, 1, 1], [1, 1, 1]], dtype=np.uint8))
+        mask_erode = cv2.erode(
+            mask, np.array([[1, 1, 1], [1, 1, 1], [1, 1, 1]], dtype=np.uint8)
+        )
         rle_erode_correct = RLEMask.from_array(mask_erode)
         assert rle_eroded == rle_erode_correct
 
@@ -459,11 +493,105 @@ def test_largest_interior_rectangle():
     np.testing.assert_array_equal(rect, np.array([2, 2, 4, 7]))
 
 
-def test_connected_components():
-    mask = np.array(
-        [[0, 1, 1, 0, 0], [1, 1, 1, 1, 0], [1, 1, 1, 1, 0], [0, 0, 0, 0, 0], [0, 1, 1, 0, 0]],
-        dtype=np.uint8,
-    )
+def test_largest_interior_rectangle_around_center_integer():
+    """Test that largest_interior_rectangle_around returns exact integer center."""
+    mask = np.ones((20, 20), dtype=np.uint8)
+    rle = RLEMask.from_array(mask)
+
+    for center in [(5, 7), (10, 10), (3, 15), (8, 4)]:
+        rect = rle.largest_interior_rectangle_around(center)
+        x, y, w, h = rect
+        result_cx = x + (w - 1) / 2
+        result_cy = y + (h - 1) / 2
+        np.testing.assert_almost_equal(result_cx, center[0], decimal=5)
+        np.testing.assert_almost_equal(result_cy, center[1], decimal=5)
+
+
+def test_largest_interior_rectangle_around_center_float():
+    """Test that largest_interior_rectangle_around returns exact float center."""
+    mask = np.ones((20, 20), dtype=np.uint8)
+    rle = RLEMask.from_array(mask)
+
+    for center in [(5.3, 7.8), (10.5, 10.5), (3.1, 15.9), (8.7, 4.2)]:
+        rect = rle.largest_interior_rectangle_around(center)
+        x, y, w, h = rect
+        result_cx = x + (w - 1) / 2
+        result_cy = y + (h - 1) / 2
+        np.testing.assert_almost_equal(result_cx, center[0], decimal=5)
+        np.testing.assert_almost_equal(result_cy, center[1], decimal=5)
+
+
+def test_largest_interior_rectangle_around_aspect_ratio():
+    """Test that largest_interior_rectangle_around returns exact aspect ratio."""
+    mask = np.ones((30, 30), dtype=np.uint8)
+    rle = RLEMask.from_array(mask)
+
+    for aspect_ratio in [1.0, 1.5, 2.0, 0.5, 16 / 9, 4 / 3]:
+        rect = rle.largest_interior_rectangle_around(
+            (15, 15), aspect_ratio=aspect_ratio
+        )
+        x, y, w, h = rect
+        if h > 0:
+            result_aspect = w / h
+            np.testing.assert_almost_equal(result_aspect, aspect_ratio, decimal=5)
+
+
+def test_largest_interior_rectangle_around_center_and_aspect():
+    """Test that both center and aspect ratio are exact."""
+    mask = np.ones((30, 30), dtype=np.uint8)
+    rle = RLEMask.from_array(mask)
+
+    for center in [(10.3, 15.7), (14.5, 14.5), (8.2, 20.1)]:
+        for aspect_ratio in [1.5, 2.0, 0.75]:
+            rect = rle.largest_interior_rectangle_around(
+                center, aspect_ratio=aspect_ratio
+            )
+            x, y, w, h = rect
+            if h > 0:
+                result_cx = x + (w - 1) / 2
+                result_cy = y + (h - 1) / 2
+                result_aspect = w / h
+                np.testing.assert_almost_equal(result_cx, center[0], decimal=5)
+                np.testing.assert_almost_equal(result_cy, center[1], decimal=5)
+                np.testing.assert_almost_equal(result_aspect, aspect_ratio, decimal=5)
+
+
+def test_largest_interior_rectangle_around_inside_mask():
+    """Test that the returned rectangle is inside the foreground."""
+    # Create a mask with some structure
+    mask = np.zeros((30, 30), dtype=np.uint8)
+    mask[5:25, 5:25] = 1
+
+    rle = RLEMask.from_array(mask)
+
+    for center in [(10, 10), (15.5, 15.5), (12.3, 18.7)]:
+        for aspect_ratio in [None, 1.5, 2.0]:
+            rect = rle.largest_interior_rectangle_around(
+                center, aspect_ratio=aspect_ratio
+            )
+            x, y, w, h = rect
+            if w > 0 and h > 0:
+                # Check that rectangle is inside the foreground
+                x_int, y_int = int(np.floor(x)), int(np.floor(y))
+                w_ceil, h_ceil = (
+                    int(np.ceil(x + w)) - x_int,
+                    int(np.ceil(y + h)) - y_int,
+                )
+                rect_region = mask[y_int : y_int + h_ceil, x_int : x_int + w_ceil]
+                assert rect_region.all(), f"Rectangle not inside mask for center={center}, aspect={aspect_ratio}"
+
+
+def test_largest_interior_rectangle_aspect_ratio():
+    """Test that largest_interior_rectangle with aspect_ratio returns exact aspect."""
+    mask = np.ones((30, 30), dtype=np.uint8)
+    rle = RLEMask.from_array(mask)
+
+    for aspect_ratio in [1.0, 1.5, 2.0, 0.5, 16 / 9, 4 / 3]:
+        rect = rle.largest_interior_rectangle(aspect_ratio=aspect_ratio)
+        x, y, w, h = rect
+        if h > 0:
+            result_aspect = w / h
+            np.testing.assert_almost_equal(result_aspect, aspect_ratio, decimal=5)
 
 
 def shift_arr(arr, shifts):

@@ -9,6 +9,7 @@ from rlemasklib.oop import RLEMask
 # Affine Warp Tests
 # =============================================================================
 
+
 class TestWarpAffine:
     def test_identity_transform(self):
         """Identity affine transform should preserve mask."""
@@ -92,6 +93,7 @@ class TestWarpAffine:
 # Perspective Warp Tests
 # =============================================================================
 
+
 class TestWarpPerspective:
     def test_identity_homography(self):
         """Identity homography should preserve mask."""
@@ -145,6 +147,7 @@ class TestWarpPerspective:
 # =============================================================================
 # Resize Tests
 # =============================================================================
+
 
 class TestResize:
     def test_resize_to_shape(self):
@@ -205,6 +208,7 @@ class TestResize:
 # =============================================================================
 # Transpose and Rotation Tests
 # =============================================================================
+
 
 class TestTransposeRotation:
     def test_transpose_preserves_content(self):
@@ -293,6 +297,7 @@ class TestTransposeRotation:
 # Flip Tests
 # =============================================================================
 
+
 class TestFlip:
     def test_flipud(self):
         """flipud should flip vertically."""
@@ -354,6 +359,7 @@ class TestFlip:
 # Repeat Tests
 # =============================================================================
 
+
 class TestRepeat:
     def test_repeat_basic(self):
         """repeat should expand each pixel."""
@@ -388,6 +394,7 @@ class TestRepeat:
 # =============================================================================
 # Integration Tests
 # =============================================================================
+
 
 class TestTransformIntegration:
     def test_resize_then_crop(self):

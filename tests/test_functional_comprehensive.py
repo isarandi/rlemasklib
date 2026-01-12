@@ -10,6 +10,7 @@ from rlemasklib.boolfunc import BoolFunc
 # Test Fixtures
 # =============================================================================
 
+
 @pytest.fixture
 def eye3():
     """3x3 identity matrix mask."""
@@ -40,23 +41,24 @@ def decode_and_compare(rle, expected):
 # Encode/Decode Tests
 # =============================================================================
 
+
 class TestEncodeDecode:
     def test_encode_compressed(self, eye3):
         """encode with compressed=True should return 'counts' key."""
         rle = rlemasklib.encode(eye3, compressed=True)
-        assert 'counts' in rle
-        assert 'ucounts' not in rle
+        assert "counts" in rle
+        assert "ucounts" not in rle
 
     def test_encode_uncompressed(self, eye3):
         """encode with compressed=False should return 'ucounts' key."""
         rle = rlemasklib.encode(eye3, compressed=False)
-        assert 'ucounts' in rle
-        assert 'counts' not in rle
+        assert "ucounts" in rle
+        assert "counts" not in rle
 
     def test_encode_with_zlevel(self, eye3):
         """encode with zlevel should return 'zcounts' key."""
         rle = rlemasklib.encode(eye3, compressed=True, zlevel=-1)
-        assert 'zcounts' in rle
+        assert "zcounts" in rle
 
     def test_encode_c_contiguous(self):
         """encode should handle C-contiguous arrays."""
@@ -89,7 +91,7 @@ class TestEncodeDecode:
 
     def test_decode_ucounts(self):
         """decode should handle 'ucounts' format."""
-        rle = {'size': [2, 2], 'ucounts': [0, 1, 2, 1]}
+        rle = {"size": [2, 2], "ucounts": [0, 1, 2, 1]}
         decoded = rlemasklib.decode(rle)
         np.testing.assert_array_equal(decoded, np.eye(2, dtype=np.uint8))
 
@@ -117,79 +119,81 @@ class TestEncodeDecode:
 # Compression Tests
 # =============================================================================
 
+
 class TestCompression:
     def test_compress_ucounts(self, eye3):
         """compress should convert ucounts to counts."""
         rle = rlemasklib.encode(eye3, compressed=False)
         compressed = rlemasklib.compress(rle)
-        assert 'counts' in compressed
-        assert 'ucounts' not in compressed
+        assert "counts" in compressed
+        assert "ucounts" not in compressed
 
     def test_compress_with_zlevel(self, eye3):
         """compress with zlevel should add zlib compression."""
         rle = rlemasklib.encode(eye3, compressed=True)
         compressed = rlemasklib.compress(rle, zlevel=-1)
-        assert 'zcounts' in compressed
+        assert "zcounts" in compressed
 
     def test_decompress_counts(self, eye3):
         """decompress should convert counts to ucounts."""
         rle = rlemasklib.encode(eye3, compressed=True)
         decompressed = rlemasklib.decompress(rle)
-        assert 'ucounts' in decompressed
+        assert "ucounts" in decompressed
 
     def test_decompress_zcounts(self, eye3):
         """decompress should handle zcounts."""
         rle = rlemasklib.encode(eye3, zlevel=-1)
         decompressed = rlemasklib.decompress(rle)
-        assert 'ucounts' in decompressed
+        assert "ucounts" in decompressed
 
     def test_decompress_only_gzip(self, eye3):
         """decompress with only_gzip=True should only remove zlib."""
         rle = rlemasklib.encode(eye3, zlevel=-1)
         decompressed = rlemasklib.decompress(rle, only_gzip=True)
-        assert 'counts' in decompressed
-        assert 'zcounts' not in decompressed
+        assert "counts" in decompressed
+        assert "zcounts" not in decompressed
 
 
 # =============================================================================
 # Mask Creation Tests
 # =============================================================================
 
+
 class TestMaskCreation:
     def test_zeros(self):
         """zeros should create all-background mask."""
         rle = rlemasklib.zeros(imshape=(5, 7))
-        assert rle['size'] == [5, 7]
+        assert rle["size"] == [5, 7]
         assert rlemasklib.area(rle) == 0
 
     def test_ones(self):
         """ones should create all-foreground mask."""
         rle = rlemasklib.ones(imshape=(5, 7))
-        assert rle['size'] == [5, 7]
+        assert rle["size"] == [5, 7]
         assert rlemasklib.area(rle) == 35
 
     def test_zeros_imsize(self):
         """zeros with imsize should use (width, height) order."""
         rle = rlemasklib.zeros(imsize=(7, 5))  # width=7, height=5
-        assert rle['size'] == [5, 7]
+        assert rle["size"] == [5, 7]
 
     def test_ones_imsize(self):
         """ones with imsize should use (width, height) order."""
         rle = rlemasklib.ones(imsize=(7, 5))
-        assert rle['size'] == [5, 7]
+        assert rle["size"] == [5, 7]
 
     def test_zeros_like(self, eye3):
         """zeros_like should create zeros with same size."""
         rle = rlemasklib.encode(eye3)
         zeros = rlemasklib.zeros_like(rle)
-        assert zeros['size'] == rle['size']
+        assert zeros["size"] == rle["size"]
         assert rlemasklib.area(zeros) == 0
 
     def test_ones_like(self, eye3):
         """ones_like should create ones with same size."""
         rle = rlemasklib.encode(eye3)
         ones = rlemasklib.ones_like(rle)
-        assert ones['size'] == rle['size']
+        assert ones["size"] == rle["size"]
         assert rlemasklib.area(ones) == 9
 
     def test_from_bbox(self):
@@ -218,6 +222,7 @@ class TestMaskCreation:
 # =============================================================================
 # Set Operations Tests
 # =============================================================================
+
 
 class TestSetOperations:
     def test_complement(self, eye3):
@@ -289,6 +294,7 @@ class TestSetOperations:
 # =============================================================================
 # BoolFunc Tests
 # =============================================================================
+
 
 class TestBoolFunc:
     def test_boolfunc_a(self):
@@ -398,6 +404,7 @@ class TestBoolFunc:
 # Geometric Operations Tests
 # =============================================================================
 
+
 class TestGeometricOperations:
     def test_crop(self, rect_5x5):
         """crop should extract rectangular region."""
@@ -466,6 +473,7 @@ class TestGeometricOperations:
 # =============================================================================
 # Morphological Operations Tests
 # =============================================================================
+
 
 class TestMorphology:
     def test_dilate(self):
@@ -566,6 +574,7 @@ class TestMorphology:
 # Connected Components Tests
 # =============================================================================
 
+
 class TestConnectedComponents:
     def test_connected_components(self):
         """connected_components should find separate regions."""
@@ -628,6 +637,7 @@ class TestConnectedComponents:
 # Analysis Tests
 # =============================================================================
 
+
 class TestAnalysis:
     def test_area(self, eye3):
         """area should count foreground pixels."""
@@ -679,6 +689,7 @@ class TestAnalysis:
 # =============================================================================
 # Edge Cases Tests
 # =============================================================================
+
 
 class TestEdgeCases:
     def test_empty_mask(self):
@@ -734,6 +745,6 @@ class TestEdgeCases:
     def test_decode_invalid_size(self):
         """decode with invalid size should raise error."""
         rle = rlemasklib.encode(np.eye(3, dtype=np.uint8))
-        rle['size'] = [2, 2]  # wrong size
+        rle["size"] = [2, 2]  # wrong size
         with pytest.raises(ValueError):
             rlemasklib.decode(rle)

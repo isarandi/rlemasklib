@@ -7,6 +7,7 @@ from rlemasklib.oop import RLEMask
 # Try to import cv2 for morphology ground truth
 try:
     import cv2
+
     HAS_CV2 = True
 except ImportError:
     HAS_CV2 = False
@@ -215,7 +216,7 @@ class TestCropRandomized:
 
         rle = RLEMask.from_array(mask)
         result = np.array(rle.crop([x, y, cw, ch]))
-        expected = mask[y:y+ch, x:x+cw]
+        expected = mask[y : y + ch, x : x + cw]
         np.testing.assert_array_equal(result, expected)
 
 
@@ -257,8 +258,8 @@ class TestShiftRandomized:
         np.random.seed(seed)
         mask = random_mask(max_h=20, max_w=20)
         h, w = mask.shape
-        dy = np.random.randint(-h//2, h//2 + 1)
-        dx = np.random.randint(-w//2, w//2 + 1)
+        dy = np.random.randint(-h // 2, h // 2 + 1)
+        dx = np.random.randint(-w // 2, w // 2 + 1)
 
         rle = RLEMask.from_array(mask)
         result = np.array(rle.shift((dy, dx)))
@@ -486,7 +487,7 @@ class TestConnectedComponentsRandomized:
 
         if len(components) > 1:
             for i, c1 in enumerate(components):
-                for c2 in components[i+1:]:
+                for c2 in components[i + 1 :]:
                     intersection = c1 & c2
                     assert intersection.area() == 0
 

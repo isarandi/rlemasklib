@@ -10,6 +10,7 @@ from rlemasklib.boolfunc import BoolFunc
 # Test Fixtures
 # =============================================================================
 
+
 @pytest.fixture
 def eye3():
     """3x3 identity matrix mask."""
@@ -42,6 +43,7 @@ def rect_mask():
 # =============================================================================
 # Construction Tests
 # =============================================================================
+
 
 class TestConstruction:
     def test_from_array_basic(self, eye3):
@@ -76,7 +78,7 @@ class TestConstruction:
 
     def test_from_dict_ucounts(self):
         """from_dict should handle uncompressed counts."""
-        d = {'ucounts': [0, 1, 2, 1], 'size': [2, 2]}
+        d = {"ucounts": [0, 1, 2, 1], "size": [2, 2]}
         rle = RLEMask.from_dict(d)
         np.testing.assert_array_equal(np.array(rle), np.eye(2, dtype=np.uint8))
 
@@ -91,7 +93,7 @@ class TestConstruction:
         """from_dict should handle zlib-compressed counts."""
         rle1 = RLEMask.from_array(eye3)
         d = rle1.to_dict(zlevel=-1)
-        assert 'zcounts' in d
+        assert "zcounts" in d
         rle2 = RLEMask.from_dict(d)
         assert rle1 == rle2
 
@@ -99,14 +101,14 @@ class TestConstruction:
         """from_counts with order='F' should work correctly."""
         # Eye 2x2 in column-major: col0=[1,0], col1=[0,1] -> flat [1,0,0,1]
         # RLE counts: 0 zeros, 1 one, 2 zeros, 1 one -> [0, 1, 2, 1]
-        rle = RLEMask.from_counts([0, 1, 2, 1], shape=(2, 2), order='F')
+        rle = RLEMask.from_counts([0, 1, 2, 1], shape=(2, 2), order="F")
         np.testing.assert_array_equal(np.array(rle), np.eye(2, dtype=np.uint8))
 
     def test_from_counts_c_order(self):
         """from_counts with order='C' should work correctly."""
         # Eye 2x2 in row-major: row0=[1,0], row1=[0,1] -> flat [1,0,0,1]
         # RLE counts: 0 zeros, 1 one, 2 zeros, 1 one -> [0, 1, 2, 1]
-        rle = RLEMask.from_counts([0, 1, 2, 1], shape=(2, 2), order='C')
+        rle = RLEMask.from_counts([0, 1, 2, 1], shape=(2, 2), order="C")
         np.testing.assert_array_equal(np.array(rle), np.eye(2, dtype=np.uint8))
 
     def test_from_counts_invalid_sum(self):
@@ -186,6 +188,7 @@ class TestConstruction:
 # Properties Tests
 # =============================================================================
 
+
 class TestProperties:
     def test_shape(self, eye3):
         """shape property should return (height, width)."""
@@ -224,6 +227,7 @@ class TestProperties:
 # =============================================================================
 # Boolean Operations Tests
 # =============================================================================
+
 
 class TestBooleanOperations:
     def test_or_operator(self, eye3, eye3_flipped):
@@ -318,6 +322,7 @@ class TestBooleanOperations:
 # Merge Operations Tests
 # =============================================================================
 
+
 class TestMergeOperations:
     def test_merge_with_boolfunc(self, eye3, eye3_flipped):
         """merge should apply BoolFunc correctly."""
@@ -385,8 +390,10 @@ class TestMergeOperations:
         m3 = RLEMask.from_array(np.array([[0, 1], [1, 1]], dtype=np.uint8))
         # Custom: (a & b) | c
         result = RLEMask.merge_many_custom([m1, m2, m3], lambda a, b, c: (a & b) | c)
-        expected = ((np.array([[1, 0], [0, 0]]) & np.array([[1, 1], [0, 0]])) |
-                    np.array([[0, 1], [1, 1]])).astype(np.uint8)
+        expected = (
+            (np.array([[1, 0], [0, 0]]) & np.array([[1, 1], [0, 0]]))
+            | np.array([[0, 1], [1, 1]])
+        ).astype(np.uint8)
         np.testing.assert_array_equal(np.array(result), expected)
 
     def test_make_merge_function(self):
@@ -402,6 +409,7 @@ class TestMergeOperations:
 # =============================================================================
 # Indexing and Slicing Tests
 # =============================================================================
+
 
 class TestIndexingSlicing:
     def test_getitem_slice(self, cross_5x5):
@@ -485,6 +493,7 @@ class TestIndexingSlicing:
 # Geometric Operations Tests
 # =============================================================================
 
+
 class TestGeometricOperations:
     def test_crop(self, rect_mask):
         """crop should extract rectangular region."""
@@ -507,7 +516,9 @@ class TestGeometricOperations:
         rle = RLEMask.from_array(mask)
         cropped, bbox = rle.tight_crop()
         assert cropped.shape == (3, 4)
-        np.testing.assert_array_equal(np.array(cropped), np.ones((3, 4), dtype=np.uint8))
+        np.testing.assert_array_equal(
+            np.array(cropped), np.ones((3, 4), dtype=np.uint8)
+        )
 
     def test_pad_zeros(self, eye3):
         """pad should add border with zeros."""
@@ -528,7 +539,7 @@ class TestGeometricOperations:
         """pad with border_type='replicate' should extend edges."""
         mask = np.array([[1, 0], [0, 1]], dtype=np.uint8)
         rle = RLEMask.from_array(mask)
-        padded = rle.pad(1, 1, 1, 1, border_type='replicate')
+        padded = rle.pad(1, 1, 1, 1, border_type="replicate")
         arr = np.array(padded)
         # Top-left corner should replicate mask[0,0]=1
         assert arr[0, 0] == 1
@@ -615,6 +626,7 @@ class TestGeometricOperations:
 # Concatenation and Tiling Tests
 # =============================================================================
 
+
 class TestConcatTile:
     def test_hconcat(self):
         """hconcat should concatenate horizontally."""
@@ -677,6 +689,7 @@ class TestConcatTile:
 # =============================================================================
 # Morphological Operations Tests
 # =============================================================================
+
 
 class TestMorphology:
     def test_dilate3x3_connectivity4(self):
@@ -762,6 +775,7 @@ class TestMorphology:
 # Connected Components Tests
 # =============================================================================
 
+
 class TestConnectedComponents:
     def test_connected_components_basic(self):
         """connected_components should find separate regions."""
@@ -830,6 +844,7 @@ class TestConnectedComponents:
 # =============================================================================
 # Analysis and Metrics Tests
 # =============================================================================
+
 
 class TestAnalysisMetrics:
     def test_area(self, eye3):
@@ -902,7 +917,7 @@ class TestAnalysisMetrics:
         masks1 = [RLEMask.from_array(np.eye(3, dtype=np.uint8))]
         masks2 = [
             RLEMask.from_array(np.eye(3, dtype=np.uint8)),
-            RLEMask.from_array(np.zeros((3, 3), dtype=np.uint8))
+            RLEMask.from_array(np.zeros((3, 3), dtype=np.uint8)),
         ]
         iou_mat = RLEMask.iou_matrix(masks1, masks2)
         assert iou_mat.shape == (1, 2)
@@ -918,23 +933,24 @@ class TestAnalysisMetrics:
 
     def test_any(self):
         """any should return True if any foreground pixels."""
-        assert RLEMask.zeros((3, 3)).any() == False
-        assert RLEMask.ones((3, 3)).any() == True
+        assert not RLEMask.zeros((3, 3)).any()
+        assert RLEMask.ones((3, 3)).any()
 
     def test_all(self):
         """all should return True if all pixels are foreground."""
-        assert RLEMask.zeros((3, 3)).all() == False
-        assert RLEMask.ones((3, 3)).all() == True
+        assert not RLEMask.zeros((3, 3)).all()
+        assert RLEMask.ones((3, 3)).all()
 
     def test_is_valid_rle(self, eye3):
         """is_valid_rle should validate RLE structure."""
         rle = RLEMask.from_array(eye3)
-        assert rle.is_valid_rle() == True
+        assert rle.is_valid_rle()
 
 
 # =============================================================================
 # Fill Operations Tests
 # =============================================================================
+
 
 class TestFillOperations:
     def test_fill_rectangle(self):
@@ -966,13 +982,13 @@ class TestFillOperations:
 # Pooling Operations Tests
 # =============================================================================
 
+
 class TestPooling:
     def test_max_pool2x2(self):
         """max_pool2x2 should max-pool by 2."""
-        mask = np.array([[1, 0, 0, 0],
-                         [0, 0, 0, 0],
-                         [0, 0, 0, 1],
-                         [0, 0, 0, 0]], dtype=np.uint8)
+        mask = np.array(
+            [[1, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 1], [0, 0, 0, 0]], dtype=np.uint8
+        )
         rle = RLEMask.from_array(mask)
         pooled = rle.max_pool2x2()
         arr = np.array(pooled)
@@ -982,10 +998,9 @@ class TestPooling:
 
     def test_min_pool2x2(self):
         """min_pool2x2 should min-pool by 2."""
-        mask = np.array([[1, 1, 1, 1],
-                         [1, 1, 1, 1],
-                         [1, 1, 0, 0],
-                         [1, 1, 0, 0]], dtype=np.uint8)
+        mask = np.array(
+            [[1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 0, 0], [1, 1, 0, 0]], dtype=np.uint8
+        )
         rle = RLEMask.from_array(mask)
         pooled = rle.min_pool2x2()
         arr = np.array(pooled)
@@ -995,10 +1010,9 @@ class TestPooling:
 
     def test_avg_pool2x2(self):
         """avg_pool2x2 should average-pool by 2."""
-        mask = np.array([[1, 1, 0, 0],
-                         [1, 0, 0, 0],
-                         [0, 0, 1, 1],
-                         [0, 0, 1, 1]], dtype=np.uint8)
+        mask = np.array(
+            [[1, 1, 0, 0], [1, 0, 0, 0], [0, 0, 1, 1], [0, 0, 1, 1]], dtype=np.uint8
+        )
         rle = RLEMask.from_array(mask)
         pooled = rle.avg_pool2x2()
         arr = np.array(pooled)
@@ -1012,6 +1026,7 @@ class TestPooling:
 # =============================================================================
 # Conversion Tests
 # =============================================================================
+
 
 class TestConversion:
     def test_to_array_default(self, eye3):
@@ -1030,29 +1045,29 @@ class TestConversion:
     def test_to_array_order_c(self, eye3):
         """to_array with order='C' should return C-contiguous."""
         rle = RLEMask.from_array(eye3)
-        arr = rle.to_array(order='C')
+        arr = rle.to_array(order="C")
         assert arr.flags.c_contiguous
 
     def test_to_array_order_f(self, eye3):
         """to_array with order='F' should return F-contiguous."""
         rle = RLEMask.from_array(eye3)
-        arr = rle.to_array(order='F')
+        arr = rle.to_array(order="F")
         assert arr.flags.f_contiguous
 
     def test_to_dict(self, eye3):
         """to_dict should return RLE dictionary."""
         rle = RLEMask.from_array(eye3)
         d = rle.to_dict()
-        assert 'size' in d
-        assert 'counts' in d
-        assert d['size'] == [3, 3]
+        assert "size" in d
+        assert "counts" in d
+        assert d["size"] == [3, 3]
 
     def test_to_dict_zlevel(self, eye3):
         """to_dict with zlevel should compress."""
         rle = RLEMask.from_array(eye3)
         d = rle.to_dict(zlevel=-1)
-        assert 'zcounts' in d
-        assert 'counts' not in d
+        assert "zcounts" in d
+        assert "counts" not in d
 
     def test___array__(self, eye3):
         """__array__ should allow np.array(rle)."""
@@ -1070,6 +1085,7 @@ class TestConversion:
 # =============================================================================
 # Misc Tests
 # =============================================================================
+
 
 class TestMisc:
     def test_copy(self, eye3):
@@ -1091,8 +1107,8 @@ class TestMisc:
         """repr should return string representation."""
         rle = RLEMask.from_array(eye3)
         r = repr(rle)
-        assert 'RLEMask' in r
-        assert 'shape' in r
+        assert "RLEMask" in r
+        assert "shape" in r
 
     def test_merge_to_label_map(self):
         """merge_to_label_map should create label image."""

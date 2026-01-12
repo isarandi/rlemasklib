@@ -3,12 +3,13 @@ import numpy as np
 import pytest
 
 # Set 1 second timeout for all tests in this file
-pytestmark = pytest.mark.timeout(1)
+pytestmark = pytest.mark.timeout(1)  # noqa: vulture
 
 
 # =============================================================================
 # Test Fixtures and Helpers
 # =============================================================================
+
 
 @pytest.fixture
 def eye3_mask():
@@ -31,15 +32,6 @@ def sample_5x5():
     return mask
 
 
-@pytest.fixture
-def checker_4x4():
-    """4x4 checkerboard pattern."""
-    mask = np.zeros((4, 4), dtype=np.uint8)
-    mask[0::2, 0::2] = 1
-    mask[1::2, 1::2] = 1
-    return mask
-
-
 def assert_mask_equal(rle, expected):
     """Helper to compare RLE mask with expected numpy array."""
     decoded = rlemasklib.decode(rle)
@@ -49,6 +41,7 @@ def assert_mask_equal(rle, expected):
 # =============================================================================
 # Core Encode/Decode Tests
 # =============================================================================
+
 
 class TestEncodeDecode:
     def test_encode_decode_roundtrip(self, eye3_mask):
@@ -74,12 +67,12 @@ class TestEncodeDecode:
     def test_encode_preserves_size(self, sample_5x5):
         """Encoded mask should have correct size metadata."""
         encoded = rlemasklib.encode(sample_5x5)
-        assert encoded['size'] == [5, 5]
+        assert encoded["size"] == [5, 5]
 
     def test_decode_error_wrong_size(self):
         """Decoding with wrong size should raise ValueError."""
         d1 = rlemasklib.encode(np.eye(3))
-        d1['size'] = [2, 2]
+        d1["size"] = [2, 2]
         with pytest.raises(ValueError):
             rlemasklib.decode(d1)
 
@@ -94,6 +87,7 @@ class TestEncodeDecode:
 # =============================================================================
 # Mask Creation Tests
 # =============================================================================
+
 
 class TestMaskCreation:
     def test_ones(self):
@@ -148,6 +142,7 @@ class TestMaskCreation:
 # =============================================================================
 # Set Operations Tests
 # =============================================================================
+
 
 class TestSetOperations:
     def test_union(self, eye3_mask, eye3_flipped):
@@ -225,6 +220,7 @@ class TestSetOperations:
 # Geometric Operations Tests
 # =============================================================================
 
+
 class TestGeometricOperations:
     def test_crop(self, sample_5x5):
         """crop() should extract rectangular region."""
@@ -299,6 +295,7 @@ class TestGeometricOperations:
 # Morphological Operations Tests
 # =============================================================================
 
+
 class TestMorphologicalOperations:
     def test_dilate_single_pixel(self):
         """Dilating single pixel should create cross (4-connectivity)."""
@@ -369,6 +366,7 @@ class TestMorphologicalOperations:
 # Connected Components Tests
 # =============================================================================
 
+
 class TestConnectedComponents:
     def test_connected_components_two_regions(self):
         """Should find separate connected regions."""
@@ -421,6 +419,7 @@ class TestConnectedComponents:
 # =============================================================================
 # Mask Analysis Tests
 # =============================================================================
+
 
 class TestMaskAnalysis:
     def test_area(self, eye3_mask):
@@ -495,6 +494,7 @@ class TestMaskAnalysis:
 # Compression Tests
 # =============================================================================
 
+
 class TestCompression:
     def test_compress_decompress_roundtrip(self, sample_5x5):
         """Compression then decompression should preserve mask."""
@@ -517,12 +517,15 @@ class TestCompression:
         rle_uncompressed = rlemasklib.encode(mask, compressed=False)
         rle_compressed = rlemasklib.encode(mask, compressed=True)
         # Compressed counts should be shorter or same
-        assert len(rle_compressed['counts']) <= len(str(rle_uncompressed['ucounts'])) + 50
+        assert (
+            len(rle_compressed["counts"]) <= len(str(rle_uncompressed["ucounts"])) + 50
+        )
 
 
 # =============================================================================
 # Edge Cases Tests
 # =============================================================================
+
 
 class TestEdgeCases:
     def test_single_pixel_mask(self):
@@ -607,13 +610,14 @@ class TestEdgeCases:
 # Batch Operations Tests
 # =============================================================================
 
+
 class TestBatchOperations:
     def test_area_batch(self):
         """area() should work on list of masks."""
         masks = [
             np.eye(3, dtype=np.uint8),
             np.ones((4, 4), dtype=np.uint8),
-            np.zeros((5, 5), dtype=np.uint8)
+            np.zeros((5, 5), dtype=np.uint8),
         ]
         rles = [rlemasklib.encode(m) for m in masks]
         areas = rlemasklib.area(rles)

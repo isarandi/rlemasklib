@@ -1,4 +1,5 @@
 """Quick smoke test for wheel validation."""
+
 import numpy as np
 from rlemasklib import RLEMask
 
