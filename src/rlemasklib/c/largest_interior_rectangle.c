@@ -207,10 +207,14 @@ void rleLargestInteriorRectangle(const RLE *R_, uint* rect_out) {
     rleFree(&R_right);
 
     // add the bbox offset in case we cropped at the start and copy the result to the output
-    rect_out[0] = bestRect.right + 1 - bestRect.width + bbox[0];
-    rect_out[1] = bestRect.top + bbox[1];
-    rect_out[2] = bestRect.width;
-    rect_out[3] = bestRect.area / bestRect.width;
+    if (bestRect.width == 0) {
+        rect_out[0] = rect_out[1] = rect_out[2] = rect_out[3] = 0;
+    } else {
+        rect_out[0] = bestRect.right + 1 - bestRect.width + bbox[0];
+        rect_out[1] = bestRect.top + bbox[1];
+        rect_out[2] = bestRect.width;
+        rect_out[3] = bestRect.area / bestRect.width;
+    }
 }
 
 static inline void updateIfBetter(
