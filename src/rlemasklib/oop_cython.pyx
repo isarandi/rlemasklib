@@ -95,6 +95,36 @@ cdef extern from "connected_components.h" nogil:
     void rleRemoveSmallConnectedComponentsInplace(RLE *R_in, siz min_size, int connectivity)
     void rleLargestConnectedComponentInplace(RLE *R_in, int connectivity)
 
+    ctypedef struct CCState:
+        pass
+
+    CCState *rleConnectedComponentsBegin(
+            const RLE *R_in,
+            int connectivity,
+            siz min_size,
+            siz *n_components_out,
+            siz **areas_out,
+            int **bboxes_out,
+            double **centroids_out) nogil
+
+    void rleConnectedComponentsExtract(
+            CCState *state,
+            bool *selected,
+            RLE **components_out,
+            siz *n_selected_out) nogil
+
+    void rleConnectedComponentsEnd(CCState *state) nogil
+
+    siz rleConnectedComponentStats(
+            const RLE *R_in,
+            int connectivity,
+            siz min_size,
+            siz **areas_out,
+            int **bboxes_out,
+            double **centroids_out) nogil
+
+    siz rleCountConnectedComponents(const RLE *R_in, int connectivity, siz min_size) nogil
+
 cdef extern from "pad_crop.h" nogil:
     void rleCrop(const RLE *R_in, RLE *R_out, siz n, const uint * bbox);
     void rleCropInplace(RLE *R_in, siz n, const uint * bbox);
@@ -784,7 +814,206 @@ cdef class RLECy:
         try:
             return [RLECy._r_from_C_rle(&components[i], steal=True) for i in range(n)]
         finally:
-            rlesFree(&components, n)
+            rlesFree(& components, n)
+
+    def connected_components_with_stats(self, filter_func=None, connectivity: int = 4,
+                                        min_size: int = 1):
+        """Extract connected components and their stats in a single pass.
+
+        Optionally filter components using a filter function that receives stats.
+        """
+        cdef CCState *state = NULL
+        cdef siz n_components = 0
+        cdef siz *areas_ptr = NULL
+        cdef int *bboxes_ptr = NULL
+        cdef double *centroids_ptr = NULL
+        cdef RLE *components = NULL
+        cdef siz n_selected = 0
+        cdef np.ndarray[np.uint8_t, ndim=1] selected_arr
+        cdef np.npy_intp areas_shape[1]
+        cdef np.npy_intp bboxes_shape[2]
+        cdef np.npy_intp centroids_shape[2]
+
+        try:
+            state = rleConnectedComponentsBegin(
+                & self.r, connectivity, min_size,
+                & n_components, & areas_ptr, & bboxes_ptr, & centroids_ptr)
+
+            if n_components == 0:
+                return [], None
+
+            # Convert C arrays to numpy (take ownership)
+            areas_shape[0] = n_components
+            areas = np.PyArray_SimpleNewFromData(1, areas_shape, np.NPY_UINT64, areas_ptr)
+            PyArray_ENABLEFLAGS(areas, np.NPY_ARRAY_OWNDATA)
+            areas_ptr = NULL
+
+            bboxes_shape[0] = n_components
+            bboxes_shape[1] = 4
+            bboxes = np.PyArray_SimpleNewFromData(2, bboxes_shape, np.NPY_INT32, bboxes_ptr)
+            PyArray_ENABLEFLAGS(bboxes, np.NPY_ARRAY_OWNDATA)
+            bboxes_ptr = NULL
+
+            centroids_shape[0] = n_components
+            centroids_shape[1] = 2
+            centroids = np.PyArray_SimpleNewFromData(2, centroids_shape, np.NPY_FLOAT64,
+                                                     centroids_ptr)
+            PyArray_ENABLEFLAGS(centroids, np.NPY_ARRAY_OWNDATA)
+            centroids_ptr = NULL
+
+            # Apply filter or select all
+            if filter_func is not None:
+                selected = filter_func(areas, bboxes, centroids)
+                selected_arr = np.ascontiguousarray(selected, dtype=np.uint8)
+            else:
+                selected_arr = np.ones(n_components, dtype=np.uint8)
+
+            rleConnectedComponentsExtract(
+                state, < bool * > & selected_arr[0], & components, & n_selected)
+
+            result = [RLECy._r_from_C_rle(& components[i], steal=True) for i in range(n_selected)]
+
+            # Filter stats to match selected components
+            if filter_func is not None:
+                mask = selected_arr.astype(np.bool_)
+                areas = areas[mask]
+                bboxes = bboxes[mask]
+                centroids = centroids[mask]
+
+            return result, (areas, bboxes, centroids)
+        finally:
+            if areas_ptr != NULL:
+                free(areas_ptr)
+            if bboxes_ptr != NULL:
+                free(bboxes_ptr)
+            if centroids_ptr != NULL:
+                free(centroids_ptr)
+            if components != NULL:
+                rlesFree(& components, n_selected)
+            if state != NULL:
+                rleConnectedComponentsEnd(state)
+
+    def connected_components_filtered(
+            self, filter_func, connectivity: int = 4, min_size: int = 1):
+        """Extract connected components with a filter function.
+
+        The filter function receives three numpy arrays (areas, bboxes, centroids)
+        and should return a boolean array indicating which components to extract.
+
+        Args:
+            filter_func: A callable that takes (areas, bboxes, centroids) and returns
+                a boolean array. areas is shape (n,), bboxes is shape (n, 4) with
+                columns (x, y, w, h), centroids is shape (n, 2) with columns (x, y).
+            connectivity: 4 or 8 for neighborhood connectivity.
+            min_size: Minimum component size to consider.
+
+        Returns:
+            A list of RLECy objects for the selected components.
+        """
+        cdef CCState *state = NULL
+        cdef siz n_components = 0
+        cdef siz *areas_ptr = NULL
+        cdef int *bboxes_ptr = NULL
+        cdef double *centroids_ptr = NULL
+        cdef RLE *components = NULL
+        cdef siz n_selected = 0
+        cdef np.ndarray[np.uint8_t, ndim=1] selected_arr
+        cdef np.npy_intp areas_shape[1]
+        cdef np.npy_intp bboxes_shape[2]
+        cdef np.npy_intp centroids_shape[2]
+
+        try:
+            # Phase 1: Get stats
+            state = rleConnectedComponentsBegin(
+                & self.r, connectivity, min_size,
+                & n_components, & areas_ptr, & bboxes_ptr, & centroids_ptr)
+
+            if n_components == 0:
+                return []
+
+            # Convert C arrays to numpy (take ownership)
+            areas_shape[0] = n_components
+            areas = np.PyArray_SimpleNewFromData(1, areas_shape, np.NPY_UINT64, areas_ptr)
+            PyArray_ENABLEFLAGS(areas, np.NPY_ARRAY_OWNDATA)
+            areas_ptr = NULL  # numpy now owns this
+
+            bboxes_shape[0] = n_components
+            bboxes_shape[1] = 4
+            bboxes = np.PyArray_SimpleNewFromData(2, bboxes_shape, np.NPY_INT32, bboxes_ptr)
+            PyArray_ENABLEFLAGS(bboxes, np.NPY_ARRAY_OWNDATA)
+            bboxes_ptr = NULL
+
+            centroids_shape[0] = n_components
+            centroids_shape[1] = 2
+            centroids = np.PyArray_SimpleNewFromData(2, centroids_shape, np.NPY_FLOAT64,
+                                                     centroids_ptr)
+            PyArray_ENABLEFLAGS(centroids, np.NPY_ARRAY_OWNDATA)
+            centroids_ptr = NULL
+
+            # Call user filter function
+            selected = filter_func(areas, bboxes, centroids)
+            selected_arr = np.ascontiguousarray(selected, dtype=np.uint8)
+
+            # Phase 2: Extract selected components
+            rleConnectedComponentsExtract(
+                state, < bool * > & selected_arr[0], & components, & n_selected)
+
+            result = [RLECy._r_from_C_rle(& components[i], steal=True) for i in range(n_selected)]
+            return result
+        finally:
+            if areas_ptr != NULL:
+                free(areas_ptr)
+            if bboxes_ptr != NULL:
+                free(bboxes_ptr)
+            if centroids_ptr != NULL:
+                free(centroids_ptr)
+            if components != NULL:
+                rlesFree(& components, n_selected)
+            if state != NULL:
+                rleConnectedComponentsEnd(state)
+
+    def connected_component_stats(self, connectivity: int = 4, min_size: int = 1):
+        """Get statistics for all connected components without extracting them.
+
+        Returns:
+            A tuple of (areas, bboxes, centroids) numpy arrays, or (None, None, None)
+            if there are no components.
+        """
+        cdef siz n_components = 0
+        cdef siz *areas_ptr = NULL
+        cdef int *bboxes_ptr = NULL
+        cdef double *centroids_ptr = NULL
+        cdef np.npy_intp areas_shape[1]
+        cdef np.npy_intp bboxes_shape[2]
+        cdef np.npy_intp centroids_shape[2]
+
+        n_components = rleConnectedComponentStats(
+            & self.r, connectivity, min_size,
+            & areas_ptr, & bboxes_ptr, & centroids_ptr)
+
+        if n_components == 0:
+            return None, None, None
+
+        # Convert C arrays to numpy (take ownership)
+        areas_shape[0] = n_components
+        areas = np.PyArray_SimpleNewFromData(1, areas_shape, np.NPY_UINT64, areas_ptr)
+        PyArray_ENABLEFLAGS(areas, np.NPY_ARRAY_OWNDATA)
+
+        bboxes_shape[0] = n_components
+        bboxes_shape[1] = 4
+        bboxes = np.PyArray_SimpleNewFromData(2, bboxes_shape, np.NPY_INT32, bboxes_ptr)
+        PyArray_ENABLEFLAGS(bboxes, np.NPY_ARRAY_OWNDATA)
+
+        centroids_shape[0] = n_components
+        centroids_shape[1] = 2
+        centroids = np.PyArray_SimpleNewFromData(2, centroids_shape, np.NPY_FLOAT64, centroids_ptr)
+        PyArray_ENABLEFLAGS(centroids, np.NPY_ARRAY_OWNDATA)
+
+        return areas, bboxes, centroids
+
+    def count_connected_components(self, connectivity: int = 4, min_size: int = 1) -> int:
+        """Count connected components without extracting them."""
+        return rleCountConnectedComponents(& self.r, connectivity, min_size)
 
     def bbox(self) -> np.ndarray:
         cdef np.ndarray[np.double_t, ndim=1] bb = np.empty(4, dtype=np.double)
