@@ -1,28 +1,13 @@
 # RLEMaskLib: Run-Length Encoded Mask Operations
-![Read the Docs](https://img.shields.io/readthedocs/rlemasklib) ![PyPI - Version](https://img.shields.io/pypi/v/rlemasklib)
+[![Read the Docs](https://img.shields.io/readthedocs/rlemasklib)](https://rlemasklib.readthedocs.io/)
+[![PyPI - Version](https://img.shields.io/pypi/v/rlemasklib)](https://pypi.org/project/rlemasklib/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-This library provides efficient run-length encoded (RLE) operations for binary masks in Python. It is designed to be fast and memory efficient, and is particularly useful for working with large datasets. The library provides an intuitive and extensive object-oriented interface as well as a simpler functional one. To achieve high efficiency, the core functionality is implemented in C, and wrapped via Cython.
+Fast run-length encoded (RLE) binary mask operations in Python. Core implemented in C via Cython for efficiency.
 
-RLEMaskLib is fully compatible with the COCO mask format (in the form of dictionaries) but can also work directly with runlength sequences.
+The API is designed to feel like NumPy and OpenCV, with familiar slicing, boolean operators, and method names.
 
-The library provides many operations on masks, including:
-
-- Set operations (complement, difference, symmetric difference) and custom boolean functions.
-- Crop, pad, tile, concatenate
-- Connected components extraction
-- Warp (affine, perspective, lens distortion)
-- Transpose, flip, rotate by multiples of 90 degrees
-- Binary morphology: dilate, erode, open, close
-- Convolve with arbitrary kernels
-- Directly create fully foreground and fully background masks
-- Decompress of COCO's compressed RLE format to integer run-lengths, and vice versa
-- Extra compression (optional) using gzip on top of the LEB128-like encoding used by the COCO API (~40% reduction beyond
-  the COCO compression)
-- Object-oriented and functional APIs.
-
-
-This library originates as a fork of the [COCO API](https://github.com/cocodataset/cocoapi)'s `pycocotools.mask` module (which was originally written by Piotr Dollár and Tsung-Yi Lin) but now mostly consists of new code.
-
+Fully compatible with the COCO mask format.
 
 ## Installation
 
@@ -30,6 +15,64 @@ This library originates as a fork of the [COCO API](https://github.com/cocodatas
 pip install rlemasklib
 ```
 
+## Quick Start
+
+```python
+import numpy as np
+from rlemasklib import RLEMask
+
+# Create from numpy array
+mask = RLEMask(np.array([
+    [0, 1, 1],
+    [1, 1, 0],
+    [0, 0, 1]
+]))
+
+# Boolean operations
+union = mask1 | mask2
+intersection = mask1 & mask2
+difference = mask1 - mask2
+complement = ~mask
+
+# Morphology
+eroded = mask.erode3x3()
+dilated = mask.dilate3x3()
+
+# Geometric transforms (NumPy/OpenCV style)
+flipped = mask.fliplr()
+rotated = mask.rot90()
+cropped = mask[10:50, 20:80]  # slicing like numpy
+resized = mask.resize((256, 256))
+
+# Analysis
+area = mask.area()
+bbox = mask.bbox()
+components = mask.connected_components()
+
+# COCO format I/O
+coco_dict = mask.to_dict()  # {'size': [h, w], 'counts': b'...'}
+mask = RLEMask.from_dict(coco_dict)
+```
+
+## Features
+
+- **Boolean operations**: union, intersection, difference, complement, XOR, custom functions
+- **Morphology**: erode, dilate, open, close (3x3, 5x5, arbitrary kernels)
+- **Geometric**: crop, pad, tile, flip, transpose, rotate, resize, warp (affine/perspective)
+- **Analysis**: area, bounding box, connected components, largest interior rectangle, IoU
+- **I/O**: COCO format, numpy arrays, polygons, bounding boxes, circles
+- **Compression**: LEB128 (COCO-compatible) + optional gzip (~40% smaller)
+
+## APIs
+
+**Object-oriented** (recommended): Work with `RLEMask` objects for chained operations.
+
+**Functional** (legacy): Dict-to-dict operations, compatible with COCO's `pycocotools.mask`.
+
 ## Documentation
 
-See [https://rlemasklib.readthedocs.io/](https://rlemasklib.readthedocs.io/).
+Full documentation with visual examples: [rlemasklib.readthedocs.io](https://rlemasklib.readthedocs.io/)
+
+## Origin
+
+Fork of [COCO API](https://github.com/cocodataset/cocoapi)'s `pycocotools.mask` (by Piotr Dollár and Tsung-Yi Lin), now mostly new code.
