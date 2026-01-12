@@ -59,10 +59,10 @@ __all__ = [
     "merge",
 ]
 
-from rlemasklib.oop import RLEMask
+from .oop import RLEMask
 
 
-from rlemasklib.rlemasklib import (
+from .rlemasklib import (
     encode,
     decode,
     compress,

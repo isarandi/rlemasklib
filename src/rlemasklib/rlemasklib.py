@@ -4,8 +4,8 @@ import zlib
 from typing import Optional
 
 import numpy as np
-import rlemasklib.rlemasklib_cython as rlemasklib_cython
-from rlemasklib.boolfunc import BoolFunc
+from . import rlemasklib_cython
+from .boolfunc import BoolFunc
 
 
 # Based on the Microsoft COCO Toolbox version 2.0

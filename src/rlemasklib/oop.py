@@ -5,8 +5,8 @@ from collections.abc import Iterable
 from typing import Union, Sequence, Optional, Callable
 
 import numpy as np
-from rlemasklib.boolfunc import BoolFunc
-from rlemasklib.oop_cython import RLECy
+from .boolfunc import BoolFunc
+from .oop_cython import RLECy
 
 
 class RLEMask:

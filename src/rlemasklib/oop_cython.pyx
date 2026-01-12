@@ -8,7 +8,7 @@ from libc.stdlib cimport malloc, free, calloc
 from libc.string cimport strlen, memcpy
 from typing import Union, Optional
 from collections.abc import Sequence, Iterable
-from rlemasklib.boolfunc import BoolFunc
+from .boolfunc import BoolFunc
 from libc.stdint cimport uint64_t, uint32_t, uint8_t
 import struct
 # intialized Numpy. must do.
