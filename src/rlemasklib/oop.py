@@ -2150,11 +2150,13 @@ class RLEMask:
         return dict(zip(self._MOMENT_KEYS, arr))
 
     def hu_moments(self) -> np.ndarray:
-        """Compute the 7 Hu moment invariants, same as cv2.HuMoments.
+        """Compute the 7 Hu moment invariants :footcite:`hu1962visual`.
 
         Hu moments are shape descriptors derived from normalized central moments,
         invariant under translation, scale, and rotation. The first 6 are also
         invariant under reflection; the 7th changes sign under reflection.
+
+        Equivalent to ``cv2.HuMoments(cv2.moments(mask))``.
 
         Returns:
             np.ndarray: Array of shape (7,) containing the Hu moment invariants.
