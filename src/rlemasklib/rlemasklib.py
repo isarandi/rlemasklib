@@ -38,38 +38,13 @@ from .boolfunc import BoolFunc
 # Thus, using the RLE can result in substantial computational savings.
 #
 
-def area(rleObjs):
-    """Compute the foreground area for a mask or multiple masks.
-
-    Args:
-        rleObjs: either a single RLE or a list of RLEs
-
-    Returns:
-        A scalar if input was a single RLE, otherwise a list of scalars.
-    """
-    if isinstance(rleObjs, (tuple, list)):
-        return rlemasklib_cython.area(rleObjs)
-    else:
-        return rlemasklib_cython.area([rleObjs])[0]
-
-
-def complement(rleObjs):
-    """Compute the complement of a mask or multiple masks.
-
-    Args:
-        rleObjs: either a single RLE or a list of RLEs
-
-    Returns:
-        A single RLE or a list of RLEs, depending on input type.
-    """
-    if isinstance(rleObjs, (tuple, list)):
-        return rlemasklib_cython.complement(rleObjs)
-    else:
-        return rlemasklib_cython.complement([rleObjs])[0]
-
 
 def encode(
-        mask: np.ndarray, compressed: bool = True, zlevel: Optional[int] = None, batch_first=False) -> dict:
+    mask: np.ndarray,
+    compressed: bool = True,
+    zlevel: Optional[int] = None,
+    batch_first=False,
+) -> dict:
     """Encode binary mask into a compressed RLE.
 
     Args:
@@ -121,83 +96,115 @@ def decode(encoded_mask: dict) -> np.ndarray:
         A binary mask (numpy 2D array of type uint8, where 0 is background and 1 is foreground)
     """
 
-    if "zcounts" in encoded_mask:
+    if 'zcounts' in encoded_mask:
         encoded_mask = dict(
-            size=encoded_mask["size"], counts=zlib.decompress(encoded_mask["zcounts"])
+            size=encoded_mask['size'], counts=zlib.decompress(encoded_mask['zcounts'])
         )
 
-    if "ucounts" in encoded_mask:
+    if 'ucounts' in encoded_mask:
         return _decode_uncompressed(encoded_mask)
 
     return _decode(encoded_mask)
 
 
-def crop(rleObjs, bbox: np.ndarray):
-    """Crop a mask or multiple masks (RLEs) by the given bounding box.
-    The size of each output RLE is the same as the size of the corresponding bounding box.
+def compress(rle: dict, zlevel: Optional[int] = None):
+    """Compress an RLE mask to a compressed RLE.
+
+    Note that the input needs to be an RLE, not a decoded binary mask.
 
     Args:
-        rleObjs: either a single RLE or a list of RLEs
-        bbox: either a single bounding box or a list of bounding boxes, in the format
-            [x_start, y_start, width, height]
+        rle: a mask in RLE format
+        zlevel: optional zlib compression level, None means no zlib compression, -1 is zlib's
+            default compression level and 0-9 are zlib's compression levels where 9 is maximum
+            compression.
 
     Returns:
-        Either a single RLE or a list of RLEs, depending on input type.
+        A compressed RLE mask.
     """
-    bbox = np.asanyarray(bbox, dtype=np.uint32)
-    if isinstance(rleObjs, (tuple, list)):
-        return rlemasklib_cython.crop(rleObjs, bbox)
-    else:
-        rleObjs_out = rlemasklib_cython.crop([rleObjs], bbox[np.newaxis])
-        return rleObjs_out[0]
+    if 'ucounts' in rle:
+        rle = _compress(rle)
+
+    if 'counts' in rle and zlevel is not None:
+        rle = dict(size=rle['size'], zcounts=zlib.compress(rle['counts'], zlevel))
+
+    return rle
 
 
-def _pad(rleObjs, paddings):
-    paddings = np.asanyarray(paddings, dtype=np.uint32)
-    if isinstance(rleObjs, (tuple, list)):
-        return rlemasklib_cython.pad(rleObjs, paddings)
-    else:
-        rleObjs_out = rlemasklib_cython.pad([rleObjs], paddings)
-        return rleObjs_out[0]
+def decompress(encoded_mask: dict, only_gzip: bool = False) -> dict:
+    """Decompress a compressed RLE mask to a decompressed RLE.
 
-
-def pad(rleObjs, paddings, value: int = 0):
-    """Pad a mask or multiple masks (RLEs) by the given padding amounts.
+    Note that this does not decode the RLE into a binary mask.
 
     Args:
-        rleObjs: either a single RLE or a list of RLEs
-        paddings: left,right,top,bottom pixel amounts to pad
+        encoded_mask: an RLE mask dictionary
+        only_gzip: whether to only decompress the zlib-compression, but not the LEB128-like
+            compression
 
     Returns:
-        Either a single RLE or a list of RLEs, depending on input type.
+        An RLE mask dictionary
+           - ``"size"`` -- [height, width]
+           - ``"ucounts"`` -- uint32 array of uncompressed run-lengths.
     """
-    if value == 0:
-        return _pad(rleObjs, paddings)
-    else:
-        return complement(_pad(complement(rleObjs), paddings))
+    if 'zcounts' in encoded_mask:
+        encoded_mask = dict(
+            size=encoded_mask['size'], counts=zlib.decompress(encoded_mask['zcounts'])
+        )
+    if only_gzip:
+        return encoded_mask
+
+    return _decompress(encoded_mask)
 
 
-def to_bbox(rleObjs):
-    """Convert an RLE mask or multiple RLE masks to a bounding box or a list of bounding boxes.
+def zeros(imshape=None, imsize=None):
+    """Create an empty (fully background) RLE mask of the given size.
 
     Args:
-        rleObjs: either a single RLE or a list of RLEs
+        imshape: [height, width] of the desired mask (either this or imsize must be provided)
+        imsize: [width, height] of the desired mask (either this or imshape must be provided)
 
     Returns:
-        bbox(es): either a single bounding box or a list of bounding boxes, in the format
-            [x_start, y_start, width, height]
+        A fully-background RLE mask dictionary.
     """
-    if isinstance(rleObjs, (tuple, list)):
-        return rlemasklib_cython.toBbox(rleObjs).astype(np.float32)
-    else:
-        return rlemasklib_cython.toBbox([rleObjs])[0].astype(np.float32)
+    imshape = get_imshape(imshape, imsize)
+    return compress({'size': imshape[:2], 'ucounts': [imshape[0] * imshape[1]]})
 
 
-def get_imshape(imshape=None, imsize=None):
-    assert imshape is not None or imsize is not None
-    if imshape is None:
-        imshape = [imsize[1], imsize[0]]
-    return imshape[:2]
+def ones(imshape=None, imsize=None) -> dict:
+    """Create a full (fully foreground) RLE mask of the given size.
+
+    Args:
+        imshape: [height, width] of the desired mask (either this or imsize must be provided)
+        imsize: [width, height] of the desired mask (either this or imshape must be provided)
+
+    Returns:
+        A fully-foreground RLE mask.
+    """
+    imshape = get_imshape(imshape, imsize)
+    return compress({'size': imshape[:2], 'ucounts': [0, imshape[0] * imshape[1]]})
+
+
+def zeros_like(mask):
+    """Create an empty (fully background) RLE mask of the same size as the input mask.
+
+    Args:
+        mask: an RLE mask dictionary
+
+    Returns:
+        A fully-background RLE mask dictionary.
+    """
+    return zeros(mask['size'])
+
+
+def ones_like(mask: dict) -> dict:
+    """Create a full (fully foreground) RLE mask of the same size as the input mask.
+
+    Args:
+        mask: an RLE mask dictionary
+
+    Returns:
+        A fully-foreground RLE mask dictionary.
+    """
+    return ones(mask['size'])
 
 
 def from_bbox(bbox, imshape=None, imsize=None):
@@ -237,113 +244,197 @@ def from_polygon(poly, imshape=None, imsize=None):
     return rlemasklib_cython.frPoly(poly[np.newaxis], imshape[0], imshape[1])[0]
 
 
-def zeros(imshape=None, imsize=None):
-    """Create an empty (fully background) RLE mask of the given size.
+def area(rleObjs):
+    """Compute the foreground area for a mask or multiple masks.
 
     Args:
-        imshape: [height, width] of the desired mask (either this or imsize must be provided)
-        imsize: [width, height] of the desired mask (either this or imshape must be provided)
+        rleObjs: either a single RLE or a list of RLEs
 
     Returns:
-        A fully-background RLE mask dictionary.
+        A scalar if input was a single RLE, otherwise a list of scalars.
     """
-    imshape = get_imshape(imshape, imsize)
-    return compress({"size": imshape[:2], "ucounts": [imshape[0] * imshape[1]]})
+    if isinstance(rleObjs, (tuple, list)):
+        return rlemasklib_cython.area(rleObjs)
+    else:
+        return rlemasklib_cython.area([rleObjs])[0]
 
 
-def ones(imshape=None, imsize=None) -> dict:
-    """Create a full (fully foreground) RLE mask of the given size.
+def centroid(rleObjs):
+    """Compute the foreground centroid for a mask or multiple masks.
 
     Args:
-        imshape: [height, width] of the desired mask (either this or imsize must be provided)
-        imsize: [width, height] of the desired mask (either this or imshape must be provided)
+        rleObjs: either a single RLE or a list of RLEs
 
     Returns:
-        A fully-foreground RLE mask.
+        A numpy array of shape (2,) with [x, y] coordinates if input was a single RLE,
+        otherwise a numpy array of shape (n, 2) with centroids for each mask.
     """
-    imshape = get_imshape(imshape, imsize)
-    return compress({"size": imshape[:2], "ucounts": [0, imshape[0] * imshape[1]]})
+    if isinstance(rleObjs, (tuple, list)):
+        return rlemasklib_cython.centroid(rleObjs).astype(np.float32)
+    else:
+        return rlemasklib_cython.centroid([rleObjs])[0].astype(np.float32)
 
 
-def ones_like(mask: dict) -> dict:
-    """Create a full (fully foreground) RLE mask of the same size as the input mask.
+def any(mask: dict) -> bool:
+    """Check if any of the pixels in the mask are foreground.
 
     Args:
-        mask: an RLE mask dictionary
+        mask: an RLE mask dictionary (with "counts" or "ucounts")
 
     Returns:
-        A fully-foreground RLE mask dictionary.
+        True if any of the pixels are foreground, False otherwise.
     """
-    return ones(mask["size"])
+    if 'ucounts' in mask:
+        return len(mask['ucounts']) > 1
+    return len(mask['counts']) > 1
 
 
-def zeros_like(mask):
-    """Create an empty (fully background) RLE mask of the same size as the input mask.
+def all(mask):
+    """Check if all pixels in the mask are foreground.
 
     Args:
-        mask: an RLE mask dictionary
+        mask: an RLE mask dictionary (with "counts" or "ucounts")
 
     Returns:
-        A fully-background RLE mask dictionary.
+        True if all pixels are foreground, False otherwise.
     """
-    return zeros(mask["size"])
+    h, w = mask['size']
+    if h * w == 0:
+        return True
+
+    if 'ucounts' in mask:
+        ucounts = mask['ucounts']
+        return len(ucounts) == 2 and ucounts[0] == 0
+
+    return len(mask['counts']) == 2 and mask['counts'][0] == b'\x00'
 
 
-def decompress(encoded_mask: dict, only_gzip: bool = False) -> dict:
-    """Decompress a compressed RLE mask to a decompressed RLE.
+def iou(masks):
+    """Compute the intersection-over-union (IoU) between the input masks.
 
-    Note that this does not decode the RLE into a binary mask.
+    This is typically used with two input masks, but more are also supported, in which case the
+    IoU as the ratio between the overall intersection and the overall union.
 
     Args:
-        encoded_mask: an RLE mask dictionary
-        only_gzip: whether to only decompress the zlib-compression, but not the LEB128-like
-            compression
+        masks: a list of RLE masks
 
     Returns:
-        An RLE mask dictionary
-           - ``"size"`` -- [height, width]
-           - ``"ucounts"`` -- uint32 array of uncompressed run-lengths.
+        A scalar IoU value, expressing the ratio of the intersection area to the union area of
+            the masks.
     """
-    if "zcounts" in encoded_mask:
-        encoded_mask = dict(
-            size=encoded_mask["size"], counts=zlib.decompress(encoded_mask["zcounts"])
-        )
-    if only_gzip:
-        return encoded_mask
-
-    return _decompress(encoded_mask)
+    return rlemasklib_cython.iouMulti(masks)
 
 
-def compress(rle: dict, zlevel: Optional[int] = None):
-    """Compress an RLE mask to a compressed RLE.
-
-    Note that the input needs to be an RLE, not a decoded binary mask.
+def to_bbox(rleObjs):
+    """Convert an RLE mask or multiple RLE masks to a bounding box or a list of bounding boxes.
 
     Args:
-        rle: a mask in RLE format
-        zlevel: optional zlib compression level, None means no zlib compression, -1 is zlib's
-            default compression level and 0-9 are zlib's compression levels where 9 is maximum
-            compression.
+        rleObjs: either a single RLE or a list of RLEs
 
     Returns:
-        A compressed RLE mask.
+        bbox(es): either a single bounding box or a list of bounding boxes, in the format
+            [x_start, y_start, width, height]
     """
-    if "ucounts" in rle:
-        rle = _compress(rle)
+    if isinstance(rleObjs, (tuple, list)):
+        return rlemasklib_cython.toBbox(rleObjs).astype(np.float32)
+    else:
+        return rlemasklib_cython.toBbox([rleObjs])[0].astype(np.float32)
 
-    if "counts" in rle and zlevel is not None:
-        rle = dict(size=rle["size"], zcounts=zlib.compress(rle["counts"], zlevel))
 
-    return rle
+def crop(rleObjs, bbox: np.ndarray):
+    """Crop a mask or multiple masks (RLEs) by the given bounding box.
+    The size of each output RLE is the same as the size of the corresponding bounding box.
+
+    Args:
+        rleObjs: either a single RLE or a list of RLEs
+        bbox: either a single bounding box or a list of bounding boxes, in the format
+            [x_start, y_start, width, height]
+
+    Returns:
+        Either a single RLE or a list of RLEs, depending on input type.
+    """
+    bbox = np.asanyarray(bbox, dtype=np.uint32)
+    if isinstance(rleObjs, (tuple, list)):
+        return rlemasklib_cython.crop(rleObjs, bbox)
+    else:
+        rleObjs_out = rlemasklib_cython.crop([rleObjs], bbox[np.newaxis])
+        return rleObjs_out[0]
+
+
+def pad(rleObjs, paddings, value: int = 0):
+    """Pad a mask or multiple masks (RLEs) by the given padding amounts.
+
+    Args:
+        rleObjs: either a single RLE or a list of RLEs
+        paddings: left,right,top,bottom pixel amounts to pad
+
+    Returns:
+        Either a single RLE or a list of RLEs, depending on input type.
+    """
+    if value == 0:
+        return _pad(rleObjs, paddings)
+    else:
+        return complement(_pad(complement(rleObjs), paddings))
+
+
+def shift(rle: dict, offset: tuple[int, int], border_value: int = 0) -> dict:
+    """Shift a mask by the given offset.
+
+    Args:
+        rle: an RLE mask dictionary
+        offset: a tuple of (y, x) pixel offset
+        border_value: the value to fill the border with (0 or 1)
+
+    Returns:
+        An RLE mask dictionary of the shifted mask.
+    """
+    if offset == (0, 0):
+        return rle
+    h, w = rle['size']
+    dy, dx = offset
+    # pad() takes [left, right, top, bottom]
+    paddings = np.maximum(0, np.array([dx, -dx, dy, -dy]))
+    # crop() takes [x, y, w, h]
+    cropbox = np.maximum(0, np.array([-dx, -dy, w, h]))
+    return crop(pad(rle, paddings, border_value), cropbox)
+
+
+def complement(rleObjs):
+    """Compute the complement of a mask or multiple masks.
+
+    Args:
+        rleObjs: either a single RLE or a list of RLEs
+
+    Returns:
+        A single RLE or a list of RLEs, depending on input type.
+    """
+    if isinstance(rleObjs, (tuple, list)):
+        return rlemasklib_cython.complement(rleObjs)
+    else:
+        return rlemasklib_cython.complement([rleObjs])[0]
 
 
 def union(masks):
-    """Compute the union of multiple RLE masks."""
+    """Compute the union of multiple RLE masks.
+
+    Args:
+        masks: a list of RLE mask dictionaries
+
+    Returns:
+        An RLE mask dictionary representing the union of all input masks.
+    """
     return merge(masks, BoolFunc.UNION)
 
 
 def intersection(masks):
-    """Compute the intersection of multiple RLE masks."""
+    """Compute the intersection of multiple RLE masks.
+
+    Args:
+        masks: a list of RLE mask dictionaries
+
+    Returns:
+        An RLE mask dictionary representing the intersection of all input masks.
+    """
     return merge(masks, BoolFunc.INTERSECTION)
 
 
@@ -358,38 +449,9 @@ def difference(mask1, mask2):
 
     Returns:
         An RLE mask dictionary of the difference, i.e., the mask of pixels where mask1 is
-            foreground and mask2 is
-
+            foreground and mask2 is background.
     """
     return merge([mask1, mask2], BoolFunc.DIFFERENCE)
-
-
-def any(mask: dict) -> bool:
-    """Check if any of the pixels in the mask are foreground.
-
-    Args:
-        mask: an RLE mask dictionary
-
-    Returns:
-        True if any of the pixels are foreground, False otherwise.
-    """
-    return len(mask["counts"]) > 1
-
-
-def all(mask):
-    """Check if all pixels in the mask are foreground.
-
-    Args:
-        mask: an RLE mask dictionary
-
-    Returns:
-        True if all pixels are foreground, False otherwise.
-    """
-    h, w = mask["size"]
-    if h * w == 0:
-        return True
-
-    return len(mask["counts"]) == 2 and mask["counts"][0] == b"\x00"
 
 
 def symmetric_difference(mask1, mask2):
@@ -434,102 +496,6 @@ def merge(masks, boolfunc: BoolFunc):
     return rlemasklib_cython.merge(masks, boolfunc)
 
 
-def _compress(uncompressed_rle):
-    if isinstance(uncompressed_rle, (tuple, list)):
-        return rlemasklib_cython.frUncompressedRLE(uncompressed_rle)
-    return rlemasklib_cython.frUncompressedRLE([uncompressed_rle])[0]
-
-
-def _decompress(compressed_rle):
-    if isinstance(compressed_rle, (tuple, list)):
-        return rlemasklib_cython.decompress(compressed_rle)
-    return rlemasklib_cython.decompress([compressed_rle])[0]
-
-
-def _encode(bimask, compress_leb128=True):
-    if len(bimask.shape) == 3:
-        return rlemasklib_cython.encode(bimask, compress_leb128)
-    elif len(bimask.shape) == 2:
-        h, w = bimask.shape
-        return rlemasklib_cython.encode(bimask.reshape((h, w, 1), order="F"), compress_leb128)[0]
-
-
-def _encode_C_order(bimask, compress_leb128=True):
-    if len(bimask.shape) == 3:
-        return rlemasklib_cython.encode_C_order_sparse(bimask, compress_leb128)
-    elif len(bimask.shape) == 2:
-        return rlemasklib_cython.encode_C_order_sparse(bimask[np.newaxis], compress_leb128)[0]
-
-
-def _decode(rleObjs):
-    if isinstance(rleObjs, (tuple, list)):
-        return rlemasklib_cython.decode(rleObjs)
-    else:
-        return rlemasklib_cython.decode([rleObjs])[:, :, 0]
-
-
-def _decode_uncompressed(rleObjs):
-    if isinstance(rleObjs, (tuple, list)):
-        return rlemasklib_cython.decodeUncompressed(rleObjs)
-    else:
-        return rlemasklib_cython.decodeUncompressed([rleObjs])[:, :, 0]
-
-
-def iou(masks):
-    """Compute the intersection-over-union (IoU) between the input masks.
-
-    This is typically used with two input masks, but more are also supported, in which case the
-    IoU as the ratio between the overall intersection and the overall union.
-
-    Args:
-        masks: a list of RLE masks
-
-    Returns:
-        A scalar IoU value, expressing the ratio of the intersection area to the union area of
-            the masks.
-    """
-    return rlemasklib_cython.iouMulti(masks)
-
-
-def connected_components(rle: dict, connectivity: int = 4, min_size: int = 1) -> list[dict]:
-    """Compute the connected components of a mask.
-
-    Args:
-        rle: an RLE mask dictionary
-        connectivity: either 4 or 8, the connectivity of the connected components. 4 means only
-            horizontal and vertical connections are considered, while 8 means also diagonal
-            connections are considered.
-        min_size: the minimum size of the connected components to keep. Smaller components will be
-            ignored.
-
-    Returns:
-        A list of RLE masks, each representing a connected component.
-    """
-    return rlemasklib_cython.connectedComponents(rle, connectivity, min_size)
-
-
-def shift(rle: dict, offset: tuple[int, int], border_value: int = 0) -> dict:
-    """Shift a mask by the given offset.
-
-    Args:
-        rle: an RLE mask dictionary
-        offset: a tuple of (y, x) pixel offset
-        border_value: the value to fill the border with (0 or 1)
-
-    Returns:
-        An RLE mask dictionary of the shifted mask.
-    """
-    if offset == (0, 0):
-        return rle
-    h, w = rle["size"]
-    dy, dx = offset
-    # pad() takes [left, right, top, bottom]
-    paddings = np.maximum(0, np.array([dx, -dx, dy, -dy]))
-    # crop() takes [x, y, w, h]
-    cropbox = np.maximum(0, np.array([-dx, -dy, w, h]))
-    return crop(pad(rle, paddings, border_value), cropbox)
-
-
 def erode(rle: dict, connectivity: int = 4) -> dict:
     """Erode a mask with a 3x3 kernel.
 
@@ -565,7 +531,16 @@ def dilate(rle: dict, connectivity: int = 4) -> dict:
     if connectivity == 4:
         neighbor_offsets = [(0, 1), (0, -1), (1, 0), (-1, 0)]
     else:
-        neighbor_offsets = [(0, 1), (0, -1), (1, 0), (-1, 0), (1, 1), (-1, -1), (1, -1), (-1, 1)]
+        neighbor_offsets = [
+            (0, 1),
+            (0, -1),
+            (1, 0),
+            (-1, 0),
+            (1, 1),
+            (-1, -1),
+            (1, -1),
+            (-1, 1),
+        ]
     return union([rle] + [shift(rle, offset) for offset in neighbor_offsets])
 
 
@@ -701,6 +676,23 @@ def closing2(rle: dict) -> dict:
     return erode2(dilate2(rle))
 
 
+def connected_components(rle: dict, connectivity: int = 4, min_size: int = 1) -> list[dict]:
+    """Compute the connected components of a mask.
+
+    Args:
+        rle: an RLE mask dictionary
+        connectivity: either 4 or 8, the connectivity of the connected components. 4 means only
+            horizontal and vertical connections are considered, while 8 means also diagonal
+            connections are considered.
+        min_size: the minimum size of the connected components to keep. Smaller components will be
+            ignored.
+
+    Returns:
+        A list of RLE masks, each representing a connected component.
+    """
+    return rlemasklib_cython.connectedComponents(rle, connectivity, min_size)
+
+
 def remove_small_components(rle: dict, connectivity: int = 4, min_size: int = 1) -> dict:
     """Remove small connected components from a mask.
 
@@ -756,16 +748,58 @@ def largest_connected_component(rle: dict, connectivity=4) -> Optional[dict]:
     return components[np.argmax(areas)]
 
 
-def centroid(rleObjs):
-    """Compute the foreground centroid for a mask or multiple masks.
+def get_imshape(imshape=None, imsize=None):
+    assert imshape is not None or imsize is not None
+    if imshape is None:
+        imshape = [imsize[1], imsize[0]]
+    return imshape[:2]
 
-    Args:
-        rleObjs: either a single RLE or a list of RLEs
 
-    Returns:
-        A scalar if input was a single RLE, otherwise a list of scalars.
-    """
+def _pad(rleObjs, paddings):
+    paddings = np.asanyarray(paddings, dtype=np.uint32)
     if isinstance(rleObjs, (tuple, list)):
-        return rlemasklib_cython.centroid(rleObjs).astype(np.float32)
+        return rlemasklib_cython.pad(rleObjs, paddings)
     else:
-        return rlemasklib_cython.centroid([rleObjs])[0].astype(np.float32)
+        rleObjs_out = rlemasklib_cython.pad([rleObjs], paddings)
+        return rleObjs_out[0]
+
+
+def _compress(uncompressed_rle):
+    if isinstance(uncompressed_rle, (tuple, list)):
+        return rlemasklib_cython.frUncompressedRLE(uncompressed_rle)
+    return rlemasklib_cython.frUncompressedRLE([uncompressed_rle])[0]
+
+
+def _decompress(compressed_rle):
+    if isinstance(compressed_rle, (tuple, list)):
+        return rlemasklib_cython.decompress(compressed_rle)
+    return rlemasklib_cython.decompress([compressed_rle])[0]
+
+
+def _encode(bimask, compress_leb128=True):
+    if len(bimask.shape) == 3:
+        return rlemasklib_cython.encode(bimask, compress_leb128)
+    elif len(bimask.shape) == 2:
+        h, w = bimask.shape
+        return rlemasklib_cython.encode(bimask.reshape((h, w, 1), order='F'), compress_leb128)[0]
+
+
+def _encode_C_order(bimask, compress_leb128=True):
+    if len(bimask.shape) == 3:
+        return rlemasklib_cython.encode_C_order_sparse(bimask, compress_leb128)
+    elif len(bimask.shape) == 2:
+        return rlemasklib_cython.encode_C_order_sparse(bimask[np.newaxis], compress_leb128)[0]
+
+
+def _decode(rleObjs):
+    if isinstance(rleObjs, (tuple, list)):
+        return rlemasklib_cython.decode(rleObjs)
+    else:
+        return rlemasklib_cython.decode([rleObjs])[:, :, 0]
+
+
+def _decode_uncompressed(rleObjs):
+    if isinstance(rleObjs, (tuple, list)):
+        return rlemasklib_cython.decodeUncompressed(rleObjs)
+    else:
+        return rlemasklib_cython.decodeUncompressed([rleObjs])[:, :, 0]
