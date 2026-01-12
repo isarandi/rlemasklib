@@ -566,7 +566,7 @@ void rlePadReplicate(const RLE *R, RLE *M, const uint *pad_amounts) {
     uint j_toprig; // the run that has the topright pixel
     uint cnt_toprig; // the number of topright pixels in the run
     r = 0;
-    for (siz j = m - 1; j >= 0; j--) {
+    for (siz j = m; j-- > 0; ) {
         uint r_prev = r;
         r += cnts[j];
         if (r >= h) {
