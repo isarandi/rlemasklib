@@ -67,6 +67,36 @@ This creates a run-length encoded (RLE) version of the given binary mask, allowi
 Boolean Operations on Masks
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+.. mask-demo::
+   :caption: Union of two masks
+
+   [A] | [B] == [C]
+
+   [A]:    [B]:    [C]:
+   .##.    ..##    .###
+   ####    ..##    ####
+   .##.    ..##    .###
+
+.. mask-demo::
+   :caption: Intersection of two masks
+
+   [A] & [B] == [C]
+
+   [A]:    [B]:    [C]:
+   .##.    ..##    ..#.
+   ####    ..##    ..##
+   .##.    ..##    ..#.
+
+.. mask-demo::
+   :caption: Difference (A - B)
+
+   [A] - [B] == [C]
+
+   [A]:    [B]:    [C]:
+   .##.    ..##    .#..
+   ####    ..##    ##..
+   .##.    ..##    .#..
+
 .. code-block:: python
 
     from rlemasklib import RLEMask
@@ -124,6 +154,27 @@ Morphological Operations
 
 Erosion and dilation are supported with different kernel sizes and connectivity options.
 
+.. mask-demo::
+
+   [A].erode3x3() == [B]
+
+   [A]:      [B]:
+   .....     .....
+   .###.     .....
+   .###.     ..#..
+   .###.     .....
+   .....     .....
+
+.. mask-demo::
+
+   [A].dilate3x3() == [B]
+
+   [A]:      [B]:
+   .....     .....
+   .....     .###.
+   ..#..     .###.
+   .....     .###.
+   .....     .....
 
 .. code-block:: python
 
@@ -215,9 +266,13 @@ In other cases the object-oriented API is faster, especially when multiple opera
 See the full documentation of the functional API at :mod:`rlemasklib`.
 
 .. toctree::
-   :maxdepth: 3
+   :maxdepth: 2
    :caption: Contents
+   :hidden:
 
+   API Reference <api/rlemasklib/index>
+   howto/index
+   explanation/index
 
 * :ref:`genindex`
 
