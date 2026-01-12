@@ -35,13 +35,13 @@ cdef extern from "basics.h" nogil:
     ctypedef uint8_t byte
     ctypedef double * BB
     ctypedef struct RLE:
-        siz h,
-        siz w,
-        siz m,
-        uint * cnts,
-        uint * alloc,
-    void rlesInit(RLE ** R, siz n)
-    void rlesFree(RLE ** R, siz n)
+        siz h
+        siz w
+        siz m
+        uint * cnts
+        uint * alloc
+    void rlesInit(RLE **R, siz n)
+    void rlesFree(RLE **R, siz n)
     void rleFree(RLE *R)
     uint *rleFrCnts(RLE *R, siz h, siz w, siz m, uint *cnts)
     void rleBorrow(RLE *R, siz h, siz w, siz m, uint *cnts)
@@ -62,9 +62,9 @@ cdef extern from "moments.h" nogil:
     void rleCentroid(const RLE *R, double *xys, siz n)
 
 cdef extern from "pad_crop.h" nogil:
-    void rleCrop(const RLE *R_in, RLE *R_out, siz n, const uint * bbox);
-    void rleCropInplace(RLE *R_in, siz n, const uint * bbox);
-    void rleZeroPad(const RLE *R_in, RLE *R_out, siz n, const uint * pad_amounts);
+    void rleCrop(const RLE *R_in, RLE *R_out, siz n, const uint *bbox)
+    void rleCropInplace(RLE *R_in, siz n, const uint *bbox)
+    void rleZeroPad(const RLE *R_in, RLE *R_out, siz n, const uint *pad_amounts)
 
 cdef extern from "iou_nms.h" nogil:
     void rleIou(RLE *dt, RLE *gt, siz m, siz n, byte *iscrowd, double *o)
@@ -76,12 +76,12 @@ cdef extern from "shapes.h" nogil:
     void rleFrPoly(RLE *R, const double *xy, siz k, siz h, siz w)
 
 cdef extern from "connected_components.h" nogil:
-    void rleConnectedComponents(const RLE *R_in, int connectivity, siz min_size, RLE ** components,
+    void rleConnectedComponents(const RLE *R_in, int connectivity, siz min_size, RLE **components,
                                 siz *n)
     void rleRemoveSmallConnectedComponentsInplace(RLE *R_in, siz min_size, int connectivity)
 
 cdef extern from "transpose_flip.h" nogil:
-    void rleTranspose(const RLE *R, RLE * M)
+    void rleTranspose(const RLE *R, RLE *M)
 
 
 #
@@ -112,11 +112,11 @@ cdef class RLEs:
     cdef RLE *_R
     cdef siz _n
 
-    def __cinit__(self, siz n =0):
+    def __cinit__(self, siz n=0):
         if n > 0:
             rlesInit(&self._R, n)
         else:
-            self._R = <RLE*>0  # Don't allocate when n=0 to avoid leak when _R is overwritten
+            self._R = <RLE *> 0  # Don't allocate when n=0 to avoid leak when _R is overwritten
         self._n = n
 
     # free the RLE array here
@@ -179,7 +179,6 @@ def _to_uncompressed_dicts(RLEs Rs):
     cdef siz n = Rs.n
     cdef siz m
     cdef np.npy_intp shape[1]
-
     objs = []
     for i in range(n):
         shape[0] = <np.npy_intp> Rs._R[i].m
@@ -195,12 +194,12 @@ def _from_leb128_dicts(rleObjs):
     cdef siz n = len(rleObjs)
     Rs = RLEs(n)
     cdef bytes py_string
-    cdef char * c_string
+    cdef char *c_string
     cdef uint sum_counts
     for i, obj in enumerate(rleObjs):
         py_string = str.encode(obj['counts']) if type(obj['counts']) == str else obj['counts']
         c_string = py_string
-        rleFrString(<RLE *> &Rs._R[i], <const char *> c_string, obj['size'][0], obj['size'][1])
+        rleFrString(<RLE *> &Rs._R[i], <const  char *> c_string, obj['size'][0], obj['size'][1])
 
     return Rs
 
@@ -254,7 +253,7 @@ def _from_uncompressed_dicts(rleObjs):
             raise ValueError(
                 f'Invalid RLE: Sum of runlengths is {counts.sum()}, which does not match the '
                 f'expected {h * w} based on the mask height {h} and width {w}')
-        rleFrCnts(&Rs._R[i], h, w, len(counts), <uint*>&counts[0])
+        rleFrCnts(&Rs._R[i], h, w, len(counts), <uint *> &counts[0])
 
     return Rs
 
@@ -275,7 +274,7 @@ def merge(rleObjs, boolfunc=14):
 
 def area(rleObjs):
     cdef RLEs Rs = _from_leb128_dicts(rleObjs)
-    cdef uint * _a = <uint *> malloc(Rs._n * sizeof(uint))
+    cdef uint *_a = <uint *> malloc(Rs._n * sizeof(uint))
     rleArea(Rs._R, Rs._n, _a)
     cdef np.npy_intp shape[1]
     shape[0] = <np.npy_intp> Rs._n
@@ -303,14 +302,14 @@ def iouMulti(rleObjs):
     cdef RLEs Rs = _from_leb128_dicts(rleObjs)
     cdef RLEs Rs_merged = RLEs(1)  # intersection and union
 
-    cdef uint intersection_area;
+    cdef uint intersection_area
     rleMerge(Rs._R, Rs_merged._R, Rs._n, _INTERSECTION)
     rleArea(Rs_merged._R, 1, &intersection_area)
 
     if intersection_area == 0:
         return 0
 
-    cdef uint union_area;
+    cdef uint union_area
     rleFree(&Rs_merged._R[0])  # free before reusing
     rleMerge(Rs._R, Rs_merged._R, Rs._n, _UNION)
     rleArea(Rs_merged._R, 1, &union_area)
@@ -380,7 +379,7 @@ def iou(dt, gt, pyiscrowd):
             'The dt and gt should have the same data type, either RLEs, list or np.ndarray')
 
     # define local variables
-    cdef double * _iou = <double *> 0
+    cdef double *_iou = <double *> 0
     cdef np.npy_intp shape[1]
     # check type and assign iou function
     if type(dt) == RLEs:
@@ -421,7 +420,7 @@ def frPoly(poly, siz h, siz w):
     Rs = RLEs(n)
     for i, p in enumerate(poly):
         np_poly = np.array(p, dtype=np.double, order='F')
-        rleFrPoly(<RLE *> &Rs._R[i], <const double *> np_poly.data, int(len(p) / 2), h, w)
+        rleFrPoly(<RLE *> &Rs._R[i], <const  double *> np_poly.data, int(len(p) / 2), h, w)
     objs = _to_leb128_dicts(Rs)
     return objs
 
@@ -432,7 +431,8 @@ def frUncompressedRLE(ucRles):
     for i in range(n):
         Rs = RLEs(1)
         cnts = np.ascontiguousarray(ucRles[i]['ucounts'], dtype=np.uint32)
-        rleFrCnts(&Rs._R[0], ucRles[i]['size'][0], ucRles[i]['size'][1], len(cnts), <uint*>&cnts[0])
+        rleFrCnts(&Rs._R[0], ucRles[i]['size'][0], ucRles[i]['size'][1], len(cnts),
+                  <uint *> &cnts[0])
         objs.append(_to_leb128_dicts(Rs)[0])
     return objs
 
@@ -472,7 +472,7 @@ def removeSmallComponents(rleObj, min_size=1, connectivity=4):
 def centroid(rleObjs):
     cdef RLEs Rs = _from_leb128_dicts(rleObjs)
     cdef siz n = Rs.n
-    cdef double * _xys = <double *> malloc(2 * n * sizeof(double))
+    cdef double *_xys = <double *> malloc(2 * n * sizeof(double))
     rleCentroid(<const RLE *> Rs._R, _xys, n)
     cdef np.npy_intp shape[1]
     shape[0] = <np.npy_intp> 2 * n

@@ -1,6 +1,5 @@
 from enum import IntEnum
 
-import numpy as np
 
 _X = 0b1100
 _Y = 0b1010
@@ -58,7 +57,7 @@ class BoolFunc(IntEnum):
     EQUIVALENCE = ~(_X ^ _Y)
     """Equivalence (biconditional) of the two arguments (same as :attr:`XNOR`)."""
 
-    XNOR = ~(_X ^ _Y)
+    XNOR = ~(_X ^ _Y)  # noqa: vulture
     """Equivalence (biconditional) of the two arguments (same as :attr:`EQUIVALENCE`)."""
 
     IMPLICATION = ~_X | _Y

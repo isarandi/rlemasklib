@@ -5,8 +5,9 @@ Tsung-Yi Linfor the COCO dataset :footcite:`lin2014coco`.
 
 There are two ways to use this library:
 
-1. with global functions, which take RLE masks in a dictionary representation, with the keys 'counts' and 'size'
-2. with the :class:`RLEMask` class, which is an object-oriented way to manipulate RLE masks
+1. with the :class:`RLEMask` class, which is an object-oriented way to manipulate RLE masks (recommended)
+2. with global functions, which take RLE masks in a dictionary representation, with the keys 'counts' and 'size'
+
 
 """
 
@@ -105,8 +106,14 @@ from .rlemasklib import (
     merge,
 )
 
-# set the __module__ attribute of all functions/classes to this module
+# Set the __module__ attribute of all exported functions/classes to this module.
+# This is necessary for sphinx-codeautolink to correctly resolve references like
+# `RLEMask` to `rlemasklib.RLEMask` in code blocks. Without this, sphinx-codeautolink
+# cannot link names that are imported (e.g., `from rlemasklib import RLEMask`) because
+# it doesn't know that `RLEMask` refers to `rlemasklib.RLEMask` rather than
+# `rlemasklib.oop.RLEMask`. The _module_original_ attribute preserves the true module
+# for use by docs/conf.py's `module_restored` context manager when resolving source links.
 for x in __all__:
     obj = globals()[x]
-    obj._module_original_ = obj.__module__
+    obj._module_original_ = obj.__module__  # noqa: vulture
     obj.__module__ = __name__
