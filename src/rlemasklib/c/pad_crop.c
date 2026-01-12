@@ -46,8 +46,8 @@ void rleCrop(const RLE *R, RLE *M, siz n, const uint *bbox) {
             uint box_start = box_x_start * h;
             uint box_end = (box_x_start + box_w) * h;
 
-            siz j_first;
-            uint cnt_first;
+            siz j_first = 0;
+            uint cnt_first = 0;
             siz r = 0;
             for (siz j = 0; j < m; j++) {
                 r += cnts_in[j];
@@ -59,8 +59,8 @@ void rleCrop(const RLE *R, RLE *M, siz n, const uint *bbox) {
             }
 
             // find the run that has the bottomright pixel of the box
-            siz j_last;
-            uint cnt_last;
+            siz j_last = 0;
+            uint cnt_last = 0;
             r = h * w;
             for (siz j = m - 1; true; j--) {
                 r -= cnts_in[j];
@@ -157,8 +157,8 @@ void rleCropInplace(RLE *R, siz n, const uint *bbox) {
             uint box_start = box_x_start * h;
             uint box_end = (box_x_start + box_w) * h;
 
-            siz j_first;
-            uint cnt_first;
+            siz j_first = 0;
+            uint cnt_first = 0;
             siz r = 0;
             for (siz j = 0; j < m; j++) {
                 r += cnts[j];
@@ -170,8 +170,8 @@ void rleCropInplace(RLE *R, siz n, const uint *bbox) {
             }
 
             // find the run that has the bottomright pixel of the box
-            siz j_last;
-            uint cnt_last;
+            siz j_last = 0;
+            uint cnt_last = 0;
             r = h * w;
             for (siz j = m - 1; true; j--) {
                 r -= cnts[j];
