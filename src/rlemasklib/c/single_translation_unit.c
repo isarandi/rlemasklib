@@ -1,6 +1,6 @@
 #include "basics.c"
 #include "boolfuncs.c"
-#include "connected_components_refactor.c"
+#include "connected_components.c"
 #include "encode_decode.c"
 #include "iou_nms.c"
 #include "largest_interior_rectangle.c"
