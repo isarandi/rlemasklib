@@ -85,6 +85,9 @@ cdef extern from "moments.h" nogil:
     void rleArea(const RLE *R, siz n, uint *a)
     void rleCentroid(const RLE *R, double *xys, siz n)
     void rleNonZeroIndices(const RLE *R, uint **coords_out, siz *n_out)
+    void rleRawMoments(const RLE *R, double *moments)
+    void rleMoments(const RLE *R, double *out)
+    void rleHuMoments(const RLE *R, double *hu)
 
 cdef extern from "connected_components.h" nogil:
     void rleConnectedComponents(
@@ -758,6 +761,21 @@ cdef class RLECy:
         cdef np.ndarray[np.double_t, ndim=1] xy = np.empty(2, dtype=np.double)
         rleCentroid(&self.r, &xy[0], 1)
         return xy
+
+    def hu_moments(self) -> np.ndarray:
+        cdef np.ndarray[np.double_t, ndim=1] hu = np.empty(7, dtype=np.double)
+        rleHuMoments(& self.r, & hu[0])
+        return hu
+
+    def raw_moments(self) -> np.ndarray:
+        cdef np.ndarray[np.double_t, ndim=1] moments = np.empty(10, dtype=np.double)
+        rleRawMoments(& self.r, & moments[0])
+        return moments
+
+    def moments(self) -> np.ndarray:
+        cdef np.ndarray[np.double_t, ndim=1] out = np.empty(24, dtype=np.double)
+        rleMoments(& self.r, & out[0])
+        return out
 
     def connected_components(self, connectivity: int = 4, min_size: int = 1):
         cdef RLE *components
