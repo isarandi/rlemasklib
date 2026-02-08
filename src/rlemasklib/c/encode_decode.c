@@ -2,6 +2,13 @@
 #include <stdlib.h> // for malloc, realloc, free
 #include <stdbool.h> // for bool
 
+#ifdef __SSE2__
+#include <emmintrin.h>
+#define USE_SSE2 1
+#else
+#define USE_SSE2 0
+#endif
+
 #include "basics.h"
 #include "encode_decode.h"
 
@@ -14,22 +21,65 @@ void rleEncode(RLE *R, const byte *M, siz h, siz w, siz n) {
     }
 
     siz a = w * h;
+#if USE_SSE2
+    __m128i zero = _mm_setzero_si128();
+#endif
+
     for (siz i = 0; i < n; i++) {
         const byte *T = M + a * i;
         uint *cnts = rleInit(&R[i], h, w, a+1);
         siz k = 0;
         byte prev = 0;
-        uint c = 0;
-        for (siz j = 0; j < a; j++) {
+        siz last_pos = 0;
+        siz j = 0;
+
+#if USE_SSE2
+        // SSE2 path: skip uniform chunks of 16 bytes
+        while (j + 16 <= a) {
+            __m128i chunk = _mm_loadu_si128((__m128i*)(T + j));
+            __m128i is_zero = _mm_cmpeq_epi8(chunk, zero);
+            int mask = _mm_movemask_epi8(is_zero);
+
+            if (mask == 0xFFFF) {
+                // All 16 bytes are zero (background)
+                if (prev != 0) {
+                    cnts[k++] = (uint)(j - last_pos);
+                    last_pos = j;
+                    prev = 0;
+                }
+                j += 16;
+            } else if (mask == 0) {
+                // All 16 bytes are non-zero (foreground)
+                if (prev == 0) {
+                    cnts[k++] = (uint)(j - last_pos);
+                    last_pos = j;
+                    prev = 1;
+                }
+                j += 16;
+            } else {
+                // Mixed chunk - process byte by byte
+                for (int b = 0; b < 16; b++, j++) {
+                    byte current = T[j] != 0;
+                    if (current != prev) {
+                        cnts[k++] = (uint)(j - last_pos);
+                        last_pos = j;
+                        prev = current;
+                    }
+                }
+            }
+        }
+#endif
+        // Scalar remainder
+        for (; j < a; j++) {
             byte current = T[j] != 0;
             if (current != prev) {
-                cnts[k++] = c;
-                c = 0;
+                cnts[k++] = (uint)(j - last_pos);
+                last_pos = j;
                 prev = current;
             }
-            c++;
         }
-        cnts[k++] = c;
+
+        cnts[k++] = (uint)(a - last_pos);
         rleRealloc(&R[i], k);
     }
 }
@@ -47,17 +97,55 @@ void rleEncodeThresh128(RLE *R, const byte *M, siz h, siz w, siz n) {
         uint *cnts = rleInit(&R[i], h, w, a+1);
         siz k = 0;
         byte prev = 0;
-        uint c = 0;
-        for (siz j = 0; j < a; j++) {
+        siz last_pos = 0;
+        siz j = 0;
+
+#if USE_SSE2
+        // SSE2 path: _mm_movemask_epi8 extracts high bits - perfect for >= 128 check
+        while (j + 16 <= a) {
+            __m128i chunk = _mm_loadu_si128((__m128i*)(T + j));
+            int mask = _mm_movemask_epi8(chunk);  // high bit of each byte
+
+            if (mask == 0) {
+                // All 16 bytes < 128 (background)
+                if (prev != 0) {
+                    cnts[k++] = (uint)(j - last_pos);
+                    last_pos = j;
+                    prev = 0;
+                }
+                j += 16;
+            } else if (mask == 0xFFFF) {
+                // All 16 bytes >= 128 (foreground)
+                if (prev == 0) {
+                    cnts[k++] = (uint)(j - last_pos);
+                    last_pos = j;
+                    prev = 0x80;
+                }
+                j += 16;
+            } else {
+                // Mixed chunk - process byte by byte
+                for (int b = 0; b < 16; b++, j++) {
+                    byte current = T[j] & 0x80;
+                    if (current != prev) {
+                        cnts[k++] = (uint)(j - last_pos);
+                        last_pos = j;
+                        prev = current;
+                    }
+                }
+            }
+        }
+#endif
+        // Scalar remainder
+        for (; j < a; j++) {
             byte current = T[j] & 0x80;
             if (current != prev) {
-                cnts[k++] = c;
-                c = 0;
+                cnts[k++] = (uint)(j - last_pos);
+                last_pos = j;
                 prev = current;
             }
-            c++;
         }
-        cnts[k++] = c;
+
+        cnts[k++] = (uint)(a - last_pos);
         rleRealloc(&R[i], k);
     }
 }
