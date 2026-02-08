@@ -2,7 +2,9 @@
 
 import numpy as np
 import cv2
-from skimage import data
+import pytest
+
+skimage_data = pytest.importorskip("skimage.data")
 
 import rlemasklib
 
@@ -34,17 +36,17 @@ class TestMoments:
         self._compare_moments(mask)
 
     def test_coins_thresholded(self):
-        coins = data.coins()
+        coins = skimage_data.coins()
         mask = (coins > 100).astype(np.uint8)
         self._compare_moments(mask)
 
     def test_camera_thresholded(self):
-        camera = data.camera()
+        camera = skimage_data.camera()
         mask = (camera > 128).astype(np.uint8)
         self._compare_moments(mask)
 
     def test_text_thresholded(self):
-        text = data.text()
+        text = skimage_data.text()
         mask = (text < 100).astype(np.uint8)
         self._compare_moments(mask)
 
@@ -99,17 +101,17 @@ class TestHuMoments:
         self._compare_hu_moments(mask)
 
     def test_coins_thresholded(self):
-        coins = data.coins()
+        coins = skimage_data.coins()
         mask = (coins > 100).astype(np.uint8)
         self._compare_hu_moments(mask)
 
     def test_camera_thresholded(self):
-        camera = data.camera()
+        camera = skimage_data.camera()
         mask = (camera > 128).astype(np.uint8)
         self._compare_hu_moments(mask)
 
     def test_text_thresholded(self):
-        text = data.text()
+        text = skimage_data.text()
         mask = (text < 100).astype(np.uint8)
         self._compare_hu_moments(mask)
 

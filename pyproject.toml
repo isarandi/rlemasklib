@@ -82,7 +82,8 @@ test-headless = [
     "pytest",
     "numpy",
     "hypothesis",
-    "opencv-python-headless"
+    "opencv-python-headless",
+    "scikit-image"
 ]
 
 [project.urls]
