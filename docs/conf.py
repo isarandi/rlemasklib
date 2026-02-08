@@ -114,7 +114,6 @@ autodoc_default_options = {
 }
 autoapi_options = [
     "members",
-    "imported-members",
     "show-inheritance",
     "special-members",
     "show-module-summary",
