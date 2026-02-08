@@ -26,7 +26,7 @@ jobs:
         uses: pypa/cibuildwheel@v2.22
         env:
           CIBW_BUILD: cp38-* cp39-* cp310-* cp311-* cp312-* cp313-*
-          CIBW_SKIP: "*-musllinux_* pp*"
+          CIBW_SKIP: "*-musllinux_* pp* *-win32 *-manylinux_i686"
           CIBW_TEST_SKIP: "cp38-macosx_*:arm64"
           CIBW_TEST_COMMAND: python -c "import rlemasklib; print(rlemasklib.__version__)"
           CIBW_BEFORE_ALL_LINUX: >
