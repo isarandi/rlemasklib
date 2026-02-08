@@ -49,7 +49,8 @@ try:
     extra_link_args.extend(deflate_libs)
 except (subprocess.CalledProcessError, FileNotFoundError):
     if sys.platform == "win32":
-        extra_link_args.append("deflate.lib")
+        # Use static lib on Windows to avoid DLL shipping
+        extra_link_args.append("deflatestatic.lib")
     else:
         extra_link_args.append("-ldeflate")
 
