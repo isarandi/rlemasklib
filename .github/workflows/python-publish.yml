@@ -37,7 +37,13 @@ jobs:
             cmake -B build -DCMAKE_BUILD_TYPE=Release &&
             cmake --build build --parallel &&
             cmake --install build
-          CIBW_BEFORE_ALL_MACOS: brew install libdeflate
+          CIBW_BEFORE_ALL_MACOS: >
+            cd /tmp &&
+            curl -L https://github.com/ebiggers/libdeflate/archive/refs/tags/v1.22.tar.gz | tar xz &&
+            cd libdeflate-1.22 &&
+            MACOSX_DEPLOYMENT_TARGET=11.0 cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 &&
+            cmake --build build --parallel &&
+            sudo cmake --install build
           CIBW_BEFORE_ALL_WINDOWS: >
             cd /d %TEMP% &&
             curl -L -o libdeflate.tar.gz https://github.com/ebiggers/libdeflate/archive/refs/tags/v1.22.tar.gz &&
