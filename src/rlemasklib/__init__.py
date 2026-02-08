@@ -63,7 +63,7 @@ __all__ = [
 from .oop import RLEMask
 
 
-from .rlemasklib import (
+from ._functional import (
     encode,
     decode,
     compress,
