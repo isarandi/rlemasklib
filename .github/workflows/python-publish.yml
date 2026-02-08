@@ -43,9 +43,9 @@ jobs:
             curl -L -o libdeflate.tar.gz https://github.com/ebiggers/libdeflate/archive/refs/tags/v1.22.tar.gz &&
             tar xzf libdeflate.tar.gz &&
             cd libdeflate-1.22 &&
-            cmake -B build -DCMAKE_BUILD_TYPE=Release &&
+            cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=C:/libdeflate -DLIBDEFLATE_BUILD_GZIP=OFF &&
             cmake --build build --config Release --parallel &&
-            cmake --install build --prefix C:/libdeflate
+            cmake --install build --config Release
           CIBW_ENVIRONMENT_WINDOWS: LIBDEFLATE_DIR=C:/libdeflate
 
       - uses: actions/upload-artifact@v4
