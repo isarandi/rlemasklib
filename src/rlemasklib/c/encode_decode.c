@@ -494,3 +494,81 @@ void rlesToLabelMapZeroInit(const RLE **Rs, byte *M, siz n) {
         }
     }
 }
+
+siz rleFromLabelMap(const byte *M, siz h, siz w, RLE *Rs) {
+    // Single-pass conversion of label map (0-255) to up to 255 RLEs.
+    // Label 0 is background (skipped). Labels 1-255 become Rs[0]-Rs[254].
+    // Returns count of non-empty RLEs (labels that appeared with foreground).
+    // Rs must be pre-allocated array of 255 RLEs (uninitialized on entry).
+
+    siz a = h * w;
+
+    // State per label: last_pos, k (run index), capacity
+    // cap[i]==0 means uninitialized
+    siz last_pos[255] = {0};
+    siz k[255] = {0};
+    siz cap[255] = {0};
+
+    byte prev = 0;
+    siz pos = 0;
+
+    // Single pass through label map (column-major order)
+    for (siz j = 0; j < a; j++) {
+        byte label = M[j];
+
+        if (label != prev) {
+            // Transition from prev to label
+            if (prev > 0) {
+                // prev exits foreground
+                siz idx = prev - 1;
+                if (k[idx] >= cap[idx]) {
+                    if (cap[idx] == 0) {
+                        cap[idx] = 10 * w;
+                        rleInit(&Rs[idx], h, w, cap[idx]);
+                    } else {
+                        cap[idx] *= 2;
+                        rleRealloc(&Rs[idx], cap[idx]);
+                    }
+                }
+                Rs[idx].cnts[k[idx]++] = (uint)(pos - last_pos[idx]);
+                last_pos[idx] = pos;
+            }
+            if (label > 0) {
+                // label enters foreground
+                siz idx = label - 1;
+                if (k[idx] >= cap[idx]) {
+                    if (cap[idx] == 0) {
+                        cap[idx] = 10 * w;
+                        rleInit(&Rs[idx], h, w, cap[idx]);
+                    } else {
+                        cap[idx] *= 2;
+                        rleRealloc(&Rs[idx], cap[idx]);
+                    }
+                }
+                Rs[idx].cnts[k[idx]++] = (uint)(pos - last_pos[idx]);
+                last_pos[idx] = pos;
+            }
+            prev = label;
+        }
+        pos++;
+    }
+
+    // Finalize active RLEs, leave unused as NULL
+    siz n_active = 0;
+    for (int i = 0; i < 255; i++) {
+        if (k[i] > 0) {
+            // Active label - emit final run and shrink to actual size
+            if (k[i] >= cap[i]) {
+                rleRealloc(&Rs[i], k[i] + 1);
+            }
+            Rs[i].cnts[k[i]++] = (uint)(a - last_pos[i]);
+            Rs[i].m = k[i];
+            n_active++;
+        } else {
+            // Unused label - leave as NULL (caller checks cnts != NULL)
+            Rs[i].cnts = NULL;
+        }
+    }
+
+    return n_active;
+}

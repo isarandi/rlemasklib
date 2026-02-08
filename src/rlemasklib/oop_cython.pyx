@@ -60,6 +60,7 @@ cdef extern from "encode_decode.h" nogil:
     char *rleToString(const RLE *R)
     void rleFrString(RLE *R, const char *s, siz h, siz w)
     void rlesToLabelMapZeroInit(const RLE **R, byte *label_map, siz n)
+    siz rleFromLabelMap(const byte *M, siz h, siz w, RLE *Rs)
 
 
 cdef extern from "boolfuncs.h" nogil:
@@ -1191,6 +1192,37 @@ cdef class RLECy:
         rlesToLabelMapZeroInit(rles_ptr, &labelmap[0, 0], len(rles))
         free(rles_ptr)
         return labelmap
+
+    @staticmethod
+    def from_label_map(label_map: np.ndarray):
+        """Convert label map to list of RLEs.
+
+        Label 0 is background, labels 1-255 become RLEs.
+        Returns list of (label, RLECy) for non-empty labels.
+        """
+        cdef np.ndarray[np.uint8_t, ndim=2, mode='fortran'] lm = np.asfortranarray(
+            label_map, dtype=np.uint8)
+        cdef siz h = lm.shape[0]
+        cdef siz w = lm.shape[1]
+
+        # Allocate array of 255 RLEs
+        cdef RLE *Rs = <RLE *> malloc(255 * sizeof(RLE))
+        if not Rs:
+            raise MemoryError("Failed to allocate memory for RLEs")
+
+        cdef siz n_active
+        try:
+            n_active = rleFromLabelMap(&lm[0, 0], h, w, Rs)
+
+            # Collect non-empty RLEs with their labels
+            result = []
+            for i in range(255):
+                if Rs[i].cnts != NULL:  # Active label
+                    result.append((i + 1, RLECy._r_from_C_rle(&Rs[i], steal=True)))
+                # Unused labels have cnts=NULL, nothing to free
+            return result
+        finally:
+            free(Rs)
 
     def roll(self):
         cdef RLECy result = RLECy()

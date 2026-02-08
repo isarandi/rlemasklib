@@ -8,6 +8,7 @@ bool rleDecodeStrided(const RLE *R, byte *M, siz row_stride, siz col_stride, byt
 bool rleDecodeBroadcast(const RLE *R, byte *M, siz num_channels, byte value);
 bool rleDecodeMultiValue(const RLE *R, byte *M, siz num_channels, const byte *values);
 void rlesToLabelMapZeroInit(const RLE **R, byte *M, siz n);
+siz rleFromLabelMap(const byte *M, siz h, siz w, RLE *Rs);
 
 char *rleToString(const RLE *R);
 void rleFrString(RLE *R, const char *s, siz h, siz w);

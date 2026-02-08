@@ -2066,6 +2066,24 @@ class RLEMask:
         """
         return RLECy.merge_to_label_map([r.cy for r in rles])
 
+    @staticmethod
+    def from_label_map(label_map: np.ndarray) -> dict[int, "RLEMask"]:
+        """Convert a label map to a dict of RLEMasks.
+
+        This is the inverse of :meth:`merge_to_label_map`.
+
+        Label 0 is treated as background and not included in the output.
+        Labels 1-255 become individual RLEMasks.
+
+        Args:
+            label_map: A 2D numpy array with integer labels 0-255.
+
+        Returns:
+            A dict mapping label values (1-255) to RLEMask objects.
+            Only labels that appear in the input are included.
+        """
+        return {label: RLEMask._init(rle) for label, rle in RLECy.from_label_map(label_map)}
+
     def repeat(self, num_h: int, num_w: int, inplace: bool = False) -> "RLEMask":
         """Repeat the mask pixels multiple times along the axes.
 
