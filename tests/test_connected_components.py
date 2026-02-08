@@ -360,7 +360,8 @@ class TestConnectedComponentsAgainstCV2:
 
     def test_stats_match_cv2_binary_blobs(self):
         """Test on binary blobs image."""
-        image = skimage_data.binary_blobs(length=128, seed=42)
+        rng = np.random.default_rng(42)
+        image = skimage_data.binary_blobs(length=128, rng=rng)
         mask = image.astype(np.uint8)
         self._compare_with_cv2(mask, connectivity=4)
         self._compare_with_cv2(mask, connectivity=8)
