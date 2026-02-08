@@ -13,3 +13,4 @@
 #include "warp_common.c"
 #include "warp_distorted.c"
 #include "warp_perspective.c"
+#include "png_to_rle.c"

@@ -33,13 +33,13 @@ cdef extern from "basics.h" nogil:
     ctypedef uint32_t uint
     ctypedef uint64_t siz
     ctypedef uint8_t byte
-    ctypedef double * BB
+    ctypedef double *BB
     ctypedef struct RLE:
         siz h
         siz w
         siz m
-        uint * cnts
-        uint * alloc
+        uint *cnts
+        uint *alloc
     void rlesInit(RLE **R, siz n)
     void rlesFree(RLE **R, siz n)
     void rleFree(RLE *R)

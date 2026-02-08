@@ -167,6 +167,12 @@ cdef extern from "warp_affine.h" nogil:
 cdef extern from "warp_perspective.h" nogil:
     void rleWarpPerspective(const RLE *R, RLE *M, siz h_out, siz w_out, double *H)
 
+cdef extern from "png_to_rle.h" nogil:
+    bint rleFromPngBytes(RLE *R, const byte *data, siz length, int threshold)
+    bint rleFromPngFile(RLE *R, const char *path, int threshold)
+    siz rlesFromLabelMapPngBytes(RLE *Rs, const byte *data, siz length)
+    siz rlesFromLabelMapPngFile(RLE *Rs, const char *path)
+
 cdef extern from "warp_distorted.h" nogil:
     struct ValidRegion:
         float *ru
@@ -271,6 +277,16 @@ cdef class RLECy:
         cdef np.ndarray[np.double_t, ndim=1] center_double = np.ascontiguousarray(
             center, dtype=np.float64)
         rleFrCircle(&self.r, <double *> center_double.data, radius, imshape[0], imshape[1])
+
+    def _i_from_png_file(self, str path, int threshold=0):
+        cdef bytes path_bytes = path.encode('utf-8')
+        if not rleFromPngFile(&self.r, <const char *> path_bytes, threshold):
+            raise ValueError("Failed to read PNG (must be 8-bit grayscale)")
+
+    def _i_from_png_bytes(self, data, int threshold=0):
+        cdef const byte[::1] data_view = data
+        if not rleFromPngBytes(&self.r, &data_view[0], len(data_view), threshold):
+            raise ValueError("Failed to decode PNG (must be 8-bit grayscale)")
 
     @staticmethod
     cdef RLECy _r_from_C_rle(RLE *rle, steal=False):
@@ -1220,6 +1236,60 @@ cdef class RLECy:
                 if Rs[i].cnts != NULL:  # Active label
                     result.append((i + 1, RLECy._r_from_C_rle(&Rs[i], steal=True)))
                 # Unused labels have cnts=NULL, nothing to free
+            return result
+        finally:
+            free(Rs)
+
+    @staticmethod
+    def from_label_map_png_file(str path):
+        """Convert PNG label map file directly to list of RLEs.
+
+        Decodes PNG and builds RLEs in single pass.
+        Label 0 is background, labels 1-255 become RLEs.
+        Returns list of (label, RLECy) for non-empty labels.
+        """
+        cdef bytes path_bytes = path.encode('utf-8')
+        cdef RLE *Rs = <RLE *> malloc(255 * sizeof(RLE))
+        if not Rs:
+            raise MemoryError("Failed to allocate memory for RLEs")
+
+        cdef siz n_active
+        try:
+            n_active = rlesFromLabelMapPngFile(Rs, <const char *> path_bytes)
+            if n_active == 0:
+                raise ValueError("Failed to read PNG (must be 8-bit grayscale)")
+
+            result = []
+            for i in range(255):
+                if Rs[i].cnts != NULL:
+                    result.append((i + 1, RLECy._r_from_C_rle(&Rs[i], steal=True)))
+            return result
+        finally:
+            free(Rs)
+
+    @staticmethod
+    def from_label_map_png_bytes(data):
+        """Convert PNG label map bytes directly to list of RLEs.
+
+        Decodes PNG and builds RLEs in single pass.
+        Label 0 is background, labels 1-255 become RLEs.
+        Returns list of (label, RLECy) for non-empty labels.
+        """
+        cdef const byte[::1] data_view = data
+        cdef RLE *Rs = <RLE *> malloc(255 * sizeof(RLE))
+        if not Rs:
+            raise MemoryError("Failed to allocate memory for RLEs")
+
+        cdef siz n_active
+        try:
+            n_active = rlesFromLabelMapPngBytes(Rs, &data_view[0], len(data))
+            if n_active == 0:
+                raise ValueError("Failed to decode PNG (must be 8-bit grayscale)")
+
+            result = []
+            for i in range(255):
+                if Rs[i].cnts != NULL:
+                    result.append((i + 1, RLECy._r_from_C_rle(&Rs[i], steal=True)))
             return result
         finally:
             free(Rs)

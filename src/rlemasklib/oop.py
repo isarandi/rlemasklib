@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import itertools
+import os
 from collections.abc import Iterable
 from typing import Union, Sequence, Optional, Callable
 
@@ -209,6 +210,43 @@ class RLEMask:
         """
         result = RLEMask._init()
         result.cy._i_from_circle(center, radius, imshape=_get_imshape(imshape, imsize))
+        return result
+
+    @staticmethod
+    def from_png(
+            path: Union[str, os.PathLike, None] = None,
+            data: Union[bytes, bytearray, memoryview, None] = None,
+            threshold: int = 0
+    ) -> "RLEMask":
+        """Create an RLEMask from an 8-bit grayscale PNG.
+
+        This is a fast path that avoids materializing the full pixel array,
+        converting directly from PNG to RLE representation.
+
+        Args:
+            path: Path to PNG file (str or Path).
+            data: PNG data as bytes, bytearray, or memoryview.
+            threshold: Pixels with values > threshold become foreground (1).
+                Default is 0, so any nonzero pixel is foreground.
+
+        Returns:
+            An RLEMask object representing the mask.
+
+        Raises:
+            ValueError: If neither path nor data is provided, or both are provided,
+                or if the PNG is not 8-bit grayscale.
+
+        Note:
+            Only 8-bit grayscale PNGs are supported. For other formats, use
+            PIL/Pillow/OpenCV to load the image and convert with `RLEMask.from_array()`.
+        """
+        if (path is None) == (data is None):
+            raise ValueError("Exactly one of 'path' or 'data' must be provided")
+        result = RLEMask._init()
+        if path is not None:
+            result.cy._i_from_png_file(str(path), threshold)
+        else:
+            result.cy._i_from_png_bytes(data, threshold)
         return result
 
     @staticmethod
@@ -2083,6 +2121,39 @@ class RLEMask:
             Only labels that appear in the input are included.
         """
         return {label: RLEMask._init(rle) for label, rle in RLECy.from_label_map(label_map)}
+
+    @staticmethod
+    def from_label_map_png(
+            path: Union[str, os.PathLike, None] = None,
+            data: Union[bytes, bytearray, memoryview, None] = None
+    ) -> dict[int, "RLEMask"]:
+        """Convert a PNG label map directly to a dict of RLEMasks.
+
+        Decodes PNG and builds RLEs in a single pass, avoiding
+        intermediate numpy array allocation.
+
+        Label 0 is treated as background and not included in the output.
+        Labels 1-255 become individual RLEMasks.
+
+        Args:
+            path: Path to PNG file (str or Path).
+            data: PNG data as bytes, bytearray, or memoryview.
+
+        Returns:
+            A dict mapping label values (1-255) to RLEMask objects.
+            Only labels that appear in the input are included.
+
+        Raises:
+            ValueError: If neither path nor data is provided, or both are provided.
+        """
+        if (path is None) == (data is None):
+            raise ValueError("Exactly one of 'path' or 'data' must be provided")
+        if path is not None:
+            return {label: RLEMask._init(rle)
+                    for label, rle in RLECy.from_label_map_png_file(str(path))}
+        else:
+            return {label: RLEMask._init(rle)
+                    for label, rle in RLECy.from_label_map_png_bytes(data)}
 
     def repeat(self, num_h: int, num_w: int, inplace: bool = False) -> "RLEMask":
         """Repeat the mask pixels multiple times along the axes.

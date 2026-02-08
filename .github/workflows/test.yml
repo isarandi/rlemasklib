@@ -26,6 +26,27 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Install libdeflate (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libdeflate-dev
+
+      - name: Install libdeflate (macOS)
+        if: runner.os == 'macOS'
+        run: brew install libdeflate
+
+      - name: Install libdeflate (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          cd "$TEMP"
+          curl -L -o libdeflate.tar.gz https://github.com/ebiggers/libdeflate/archive/refs/tags/v1.22.tar.gz
+          tar xzf libdeflate.tar.gz
+          cd libdeflate-1.22
+          cmake -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release --parallel
+          cmake --install build --prefix "C:/libdeflate"
+          echo "LIBDEFLATE_DIR=C:/libdeflate" >> "$GITHUB_ENV"
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
