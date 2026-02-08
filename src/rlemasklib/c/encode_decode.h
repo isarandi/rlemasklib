@@ -4,6 +4,9 @@
 void rleEncode(RLE *R, const byte *M, siz h, siz w, siz n);
 void rleEncodeThresh128(RLE *R, const byte *M, siz h, siz w, siz n);
 bool rleDecode(const RLE *R, byte *M, siz n, byte value);
+bool rleDecodeStrided(const RLE *R, byte *M, siz row_stride, siz col_stride, byte value);
+bool rleDecodeBroadcast(const RLE *R, byte *M, siz num_channels, byte value);
+bool rleDecodeMultiValue(const RLE *R, byte *M, siz num_channels, const byte *values);
 void rlesToLabelMapZeroInit(const RLE **R, byte *M, siz n);
 
 char *rleToString(const RLE *R);

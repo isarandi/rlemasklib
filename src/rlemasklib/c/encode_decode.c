@@ -151,11 +151,7 @@ void rleEncodeThresh128(RLE *R, const byte *M, siz h, siz w, siz n) {
 }
 
 bool rleDecode(const RLE *R, byte *M, siz n, byte value) {
-    // M must be zeroed out in advance
-    if (value == 0) {
-        return true;
-    }
-
+    // Background pixels are not touched, so M should be pre-initialized for background.
     byte *end = M + R->h * R->w * n;
     for (siz i = 0; i < n; i++) {
         for (siz j = 0; j < (R[i].m/2)*2; j++) {
@@ -170,6 +166,119 @@ bool rleDecode(const RLE *R, byte *M, siz n, byte value) {
         }
     }
     return true;
+}
+
+bool rleDecodeStrided(const RLE *R, byte *M, siz row_stride, siz col_stride, byte value) {
+    // Decode into a strided 2D array (e.g., a channel slice of HWC image).
+    // RLE is column-major, so we iterate down columns first.
+    // Background pixels are not touched.
+    siz h = R->h;
+    siz w = R->w;
+    siz pos = 0;  // linear position in column-major order
+
+    for (siz j = 0; j < (R->m/2)*2; j++) {
+        uint cnt = R->cnts[j];
+        if (j % 2) {  // foreground run
+            for (siz k = 0; k < cnt; k++) {
+                siz col = pos / h;
+                siz row = pos % h;
+                M[row * row_stride + col * col_stride] = value;
+                pos++;
+            }
+        } else {
+            pos += cnt;
+        }
+    }
+    return true;
+}
+
+bool rleDecodeBroadcast(const RLE *R, byte *M, siz num_channels, byte value) {
+    // Decode into interleaved multi-channel array (HWC layout).
+    // Same value written to all channels of foreground pixels.
+    // Background pixels are not touched.
+    byte *end = M + R->h * R->w * num_channels;
+    for (siz j = 0; j < (R->m/2)*2; j++) {
+        uint cnt = R->cnts[j];
+        siz byte_cnt = cnt * num_channels;
+        if (j % 2) {
+            if (M + byte_cnt > end) {
+                return false;
+            }
+            memset(M, value, byte_cnt);
+        }
+        M += byte_cnt;
+    }
+    return true;
+}
+
+static bool rleDecodeRGB(const RLE *R, byte *M, const byte *values) {
+    byte *end = M + R->h * R->w * 3;
+    byte v0 = values[0], v1 = values[1], v2 = values[2];
+
+    for (siz j = 0; j < (R->m/2)*2; j++) {
+        uint cnt = R->cnts[j];
+        if (j % 2) {
+            if (M + cnt * 3 > end) return false;
+            for (siz k = 0; k < cnt; k++) {
+                M[0] = v0; M[1] = v1; M[2] = v2;
+                M += 3;
+            }
+        } else {
+            M += cnt * 3;
+        }
+    }
+    return true;
+}
+
+static bool rleDecodeRGBA(const RLE *R, byte *M, const byte *values) {
+    byte *end = M + R->h * R->w * 4;
+    uint32_t v32;
+    memcpy(&v32, values, 4);
+
+    for (siz j = 0; j < (R->m/2)*2; j++) {
+        uint cnt = R->cnts[j];
+        if (j % 2) {
+            if (M + cnt * 4 > end) return false;
+            for (siz k = 0; k < cnt; k++) {
+                memcpy(M, &v32, 4);
+                M += 4;
+            }
+        } else {
+            M += cnt * 4;
+        }
+    }
+    return true;
+}
+
+static bool rleDecodeMultiValueGeneric(const RLE *R, byte *M, siz num_channels, const byte *values) {
+    byte *end = M + R->h * R->w * num_channels;
+
+    for (siz j = 0; j < (R->m/2)*2; j++) {
+        uint cnt = R->cnts[j];
+        if (j % 2) {
+            if (M + cnt * num_channels > end) return false;
+            for (siz k = 0; k < cnt; k++) {
+                memcpy(M, values, num_channels);
+                M += num_channels;
+            }
+        } else {
+            M += cnt * num_channels;
+        }
+    }
+    return true;
+}
+
+bool rleDecodeMultiValue(const RLE *R, byte *M, siz num_channels, const byte *values) {
+    // Decode into interleaved multi-channel array (HWC layout).
+    // Each channel gets its own value from the values array.
+    // M is not modified for background pixels.
+    if (num_channels == 3) {
+        return rleDecodeRGB(R, M, values);
+    } else if (num_channels == 4) {
+        return rleDecodeRGBA(R, M, values);
+    } else {
+        return rleDecodeMultiValueGeneric(R, M, num_channels, values);
+    }
 }
 
 
