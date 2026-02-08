@@ -150,6 +150,39 @@ void rleEncodeThresh128(RLE *R, const byte *M, siz h, siz w, siz n) {
     }
 }
 
+void rleEncodeThreshold(RLE *R, const byte *M, siz h, siz w, siz n, int threshold) {
+    if (threshold <= 1) {
+        rleEncode(R, M, h, w, n);
+    } else if (threshold == 128) {
+        rleEncodeThresh128(R, M, h, w, n);
+    } else {
+        if (h == 0 || w == 0) {
+            for (siz i = 0; i < n; i++) {
+                rleInit(&R[i], h, w, 0);
+            }
+            return;
+        }
+        siz a = w * h;
+        for (siz i = 0; i < n; i++) {
+            const byte *T = M + a * i;
+            uint *cnts = rleInit(&R[i], h, w, a + 1);
+            siz k = 0;
+            byte prev = 0;
+            siz last_pos = 0;
+            for (siz j = 0; j < a; j++) {
+                byte current = T[j] >= (byte)threshold;
+                if (current != prev) {
+                    cnts[k++] = (uint)(j - last_pos);
+                    last_pos = j;
+                    prev = current;
+                }
+            }
+            cnts[k++] = (uint)(a - last_pos);
+            rleRealloc(&R[i], k);
+        }
+    }
+}
+
 bool rleDecode(const RLE *R, byte *M, siz n, byte value) {
     // Background pixels are not touched, so M should be pre-initialized for background.
     byte *end = M + R->h * R->w * n;

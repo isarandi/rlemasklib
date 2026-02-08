@@ -102,13 +102,13 @@ class RLEMask:
 
     @staticmethod
     def from_array(
-        mask_array: np.ndarray, thresh128: bool = False, is_sparse: bool = True
+        mask_array: np.ndarray, threshold: int = 1, is_sparse: bool = True,
+        thresh128: bool = False
     ) -> "RLEMask":
         """Create an RLEMask object from a dense mask.
 
-        By default, any nonzero value is considered foreground and zero is considered background.
-        If ``thresh128`` is set to True, then values greater than or equal to 128 are considered
-        foreground and less than 128 are considered background.
+        Pixels with values >= ``threshold`` become foreground (1), others background (0).
+        Default threshold is 1, so any nonzero pixel is foreground.
 
         If `mask_array` is C contiguous, a transpose has to take place since the internal RLE
         format encodes the mask in Fortran order. If `is_sparse` is set to True, the transpose,
@@ -118,12 +118,16 @@ class RLEMask:
         Args:
             mask_array: a numpy array of numerical type where nonzero means foreground and zero
                 means background.
-            thresh128: whether to use 128 as the threshold for binarization (default is 1)
+            threshold: pixel value threshold for binarization. Values >= threshold become
+                foreground. Default is 1 (any nonzero). Common values: 1, 128.
             is_sparse: hint that it is more efficient to transpose the mask in RLE form, only
                 affects efficiency when the mask is C contiguous.
+            thresh128: deprecated, equivalent to threshold=128.
         """
+        if thresh128:
+            threshold = 128
         result = RLEMask._init()
-        result.cy._i_from_array(mask_array, thresh128, is_sparse)
+        result.cy._i_from_array(mask_array, threshold, is_sparse)
         return result
 
     @staticmethod
@@ -216,7 +220,7 @@ class RLEMask:
     def from_png(
             path: Union[str, os.PathLike, None] = None,
             data: Union[bytes, bytearray, memoryview, None] = None,
-            threshold: int = 0
+            threshold: int = 1
     ) -> "RLEMask":
         """Create an RLEMask from an 8-bit grayscale PNG.
 
@@ -226,8 +230,8 @@ class RLEMask:
         Args:
             path: Path to PNG file (str or Path).
             data: PNG data as bytes, bytearray, or memoryview.
-            threshold: Pixels with values > threshold become foreground (1).
-                Default is 0, so any nonzero pixel is foreground.
+            threshold: Pixels with values >= threshold become foreground (1).
+                Default is 1, so any nonzero pixel is foreground.
 
         Returns:
             An RLEMask object representing the mask.

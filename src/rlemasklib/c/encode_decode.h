@@ -3,6 +3,7 @@
 
 void rleEncode(RLE *R, const byte *M, siz h, siz w, siz n);
 void rleEncodeThresh128(RLE *R, const byte *M, siz h, siz w, siz n);
+void rleEncodeThreshold(RLE *R, const byte *M, siz h, siz w, siz n, int threshold);
 bool rleDecode(const RLE *R, byte *M, siz n, byte value);
 bool rleDecodeStrided(const RLE *R, byte *M, siz row_stride, siz col_stride, byte value);
 bool rleDecodeBroadcast(const RLE *R, byte *M, siz num_channels, byte value);

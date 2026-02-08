@@ -3,7 +3,7 @@
 
 // Convert PNG bytes to RLE mask.
 // Only supports 8-bit grayscale PNG.
-// Pixels > threshold become foreground (1), others background (0).
+// Pixels >= threshold become foreground (1), others background (0).
 // Returns true on success, false on error.
 bool rleFromPngBytes(
     RLE *R,

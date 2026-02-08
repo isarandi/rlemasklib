@@ -53,6 +53,7 @@ cdef extern from "basics.h" nogil:
 cdef extern from "encode_decode.h" nogil:
     void rleEncode(RLE *R, const byte *M, siz h, siz w, siz n)
     void rleEncodeThresh128(RLE *R, const byte *M, siz h, siz w, siz n)
+    void rleEncodeThreshold(RLE *R, const byte *M, siz h, siz w, siz n, int threshold)
     bool rleDecode(const RLE *R, byte *mask, siz n, byte value)
     bool rleDecodeStrided(const RLE *R, byte *M, siz row_stride, siz col_stride, byte value)
     bool rleDecodeBroadcast(const RLE *R, byte *M, siz num_channels, byte value)
@@ -225,7 +226,7 @@ cdef class RLECy:
         else:
             rleInit(&self.r, shape[0], shape[1], 0)
 
-    def _i_from_array(self, mask: np.ndarray, thresh128: bool = False, is_sparse: bool = True):
+    def _i_from_array(self, mask: np.ndarray, int threshold=1, is_sparse: bool = True):
         cdef byte[::1, :] data
         arr = np.asanyarray(mask)
         if arr.size > 0:
@@ -238,17 +239,11 @@ cdef class RLECy:
                 # It's typically cheaper to do the transpose already in RLE
                 data = arr.T
                 tmp = RLECy()
-                if thresh128:
-                    rleEncodeThresh128(&tmp.r, &data[0][0], mask.shape[1], mask.shape[0], 1)
-                else:
-                    rleEncode(&tmp.r, &data[0][0], mask.shape[1], mask.shape[0], 1)
+                rleEncodeThreshold(&tmp.r, &data[0][0], mask.shape[1], mask.shape[0], 1, threshold)
                 rleTranspose(&tmp.r, &self.r)
             else:
                 data = np.asfortranarray(arr, dtype=np.uint8)
-                if thresh128:
-                    rleEncodeThresh128(&self.r, &data[0][0], mask.shape[0], mask.shape[1], 1)
-                else:
-                    rleEncode(&self.r, &data[0][0], mask.shape[0], mask.shape[1], 1)
+                rleEncodeThreshold(&self.r, &data[0][0], mask.shape[0], mask.shape[1], 1, threshold)
         else:
             rleInit(&self.r, mask.shape[0], mask.shape[1], 0)
 
@@ -278,12 +273,12 @@ cdef class RLECy:
             center, dtype=np.float64)
         rleFrCircle(&self.r, <double *> center_double.data, radius, imshape[0], imshape[1])
 
-    def _i_from_png_file(self, str path, int threshold=0):
+    def _i_from_png_file(self, str path, int threshold=1):
         cdef bytes path_bytes = path.encode('utf-8')
         if not rleFromPngFile(&self.r, <const char *> path_bytes, threshold):
             raise ValueError("Failed to read PNG (must be 8-bit grayscale)")
 
-    def _i_from_png_bytes(self, data, int threshold=0):
+    def _i_from_png_bytes(self, data, int threshold=1):
         cdef const byte[::1] data_view = data
         if not rleFromPngBytes(&self.r, &data_view[0], len(data_view), threshold):
             raise ValueError("Failed to decode PNG (must be 8-bit grayscale)")

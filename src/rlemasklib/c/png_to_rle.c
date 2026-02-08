@@ -27,6 +27,169 @@ static inline int paeth_predictor(int a, int b, int c);
 static void unfilter_paeth(byte *curr, const byte *prev, siz width);
 static bool parse_png_grayscale(const byte *png_data, siz png_len, siz *width_out, siz *height_out, byte **filtered_out);
 
+// Unfilter a row in-place. Returns false on invalid filter_type.
+static inline bool unfilter_row(byte *curr_row, byte *prev_row, siz width, byte filter_type) {
+    switch (filter_type) {
+        case 0: unfilter_none(curr_row, prev_row, width); return true;
+        case 1: unfilter_sub(curr_row, prev_row, width); return true;
+        case 2: unfilter_up(curr_row, prev_row, width); return true;
+        case 3: unfilter_avg(curr_row, prev_row, width); return true;
+        case 4: unfilter_paeth(curr_row, prev_row, width); return true;
+        default: return false;
+    }
+}
+
+// Scan rows for nonzero pixels (threshold=1). Returns k (number of runs), or 0 on error.
+static siz scan_rows_nonzero(
+    byte *filtered, byte *zero_row, uint *cnts,
+    siz width, siz height, siz row_stride
+) {
+    siz k = 0;
+    byte prev = 0;
+    siz last_switch_pos = 0;
+    siz pixel_pos = 0;
+
+    for (siz row = 0; row < height; row++) {
+        byte *curr_row = filtered + row * row_stride + 1;
+        byte *prev_row = (row == 0) ? zero_row : filtered + (row - 1) * row_stride + 1;
+        if (!unfilter_row(curr_row, prev_row, width, filtered[row * row_stride]))
+            return 0;
+
+        siz i = 0;
+#if USE_SSE2
+        __m128i zero = _mm_setzero_si128();
+        while (i + 16 <= width) {
+            __m128i chunk = _mm_loadu_si128((__m128i*)(curr_row + i));
+            __m128i is_zero = _mm_cmpeq_epi8(chunk, zero);
+            int mask = _mm_movemask_epi8(is_zero);
+            if (mask == 0xFFFF) {
+                if (prev != 0) {
+                    cnts[k++] = (uint)(pixel_pos - last_switch_pos);
+                    last_switch_pos = pixel_pos;
+                    prev = 0;
+                }
+                i += 16; pixel_pos += 16;
+            } else if (mask == 0) {
+                if (prev == 0) {
+                    cnts[k++] = (uint)(pixel_pos - last_switch_pos);
+                    last_switch_pos = pixel_pos;
+                    prev = 1;
+                }
+                i += 16; pixel_pos += 16;
+            } else {
+                for (int b = 0; b < 16; b++, i++, pixel_pos++) {
+                    byte current = curr_row[i] != 0;
+                    if (current != prev) {
+                        cnts[k++] = (uint)(pixel_pos - last_switch_pos);
+                        last_switch_pos = pixel_pos;
+                        prev = current;
+                    }
+                }
+            }
+        }
+#endif
+        for (; i < width; i++, pixel_pos++) {
+            byte current = curr_row[i] != 0;
+            if (current != prev) {
+                cnts[k++] = (uint)(pixel_pos - last_switch_pos);
+                last_switch_pos = pixel_pos;
+                prev = current;
+            }
+        }
+    }
+    cnts[k++] = (uint)(pixel_pos - last_switch_pos);
+    return k;
+}
+
+// Scan rows with threshold >= 128 (high-bit check). Returns k, or 0 on error.
+static siz scan_rows_thresh128(
+    byte *filtered, byte *zero_row, uint *cnts,
+    siz width, siz height, siz row_stride
+) {
+    siz k = 0;
+    byte prev = 0;
+    siz last_switch_pos = 0;
+    siz pixel_pos = 0;
+
+    for (siz row = 0; row < height; row++) {
+        byte *curr_row = filtered + row * row_stride + 1;
+        byte *prev_row = (row == 0) ? zero_row : filtered + (row - 1) * row_stride + 1;
+        if (!unfilter_row(curr_row, prev_row, width, filtered[row * row_stride]))
+            return 0;
+
+        siz i = 0;
+#if USE_SSE2
+        while (i + 16 <= width) {
+            __m128i chunk = _mm_loadu_si128((__m128i*)(curr_row + i));
+            int mask = _mm_movemask_epi8(chunk);
+            if (mask == 0) {
+                if (prev != 0) {
+                    cnts[k++] = (uint)(pixel_pos - last_switch_pos);
+                    last_switch_pos = pixel_pos;
+                    prev = 0;
+                }
+                i += 16; pixel_pos += 16;
+            } else if (mask == 0xFFFF) {
+                if (prev == 0) {
+                    cnts[k++] = (uint)(pixel_pos - last_switch_pos);
+                    last_switch_pos = pixel_pos;
+                    prev = 1;
+                }
+                i += 16; pixel_pos += 16;
+            } else {
+                for (int b = 0; b < 16; b++, i++, pixel_pos++) {
+                    byte current = curr_row[i] >= 128;
+                    if (current != prev) {
+                        cnts[k++] = (uint)(pixel_pos - last_switch_pos);
+                        last_switch_pos = pixel_pos;
+                        prev = current;
+                    }
+                }
+            }
+        }
+#endif
+        for (; i < width; i++, pixel_pos++) {
+            byte current = curr_row[i] >= 128;
+            if (current != prev) {
+                cnts[k++] = (uint)(pixel_pos - last_switch_pos);
+                last_switch_pos = pixel_pos;
+                prev = current;
+            }
+        }
+    }
+    cnts[k++] = (uint)(pixel_pos - last_switch_pos);
+    return k;
+}
+
+// Scan rows with generic threshold (scalar only). Returns k, or 0 on error.
+static siz scan_rows_generic(
+    byte *filtered, byte *zero_row, uint *cnts,
+    siz width, siz height, siz row_stride, int threshold
+) {
+    siz k = 0;
+    byte prev = 0;
+    siz last_switch_pos = 0;
+    siz pixel_pos = 0;
+
+    for (siz row = 0; row < height; row++) {
+        byte *curr_row = filtered + row * row_stride + 1;
+        byte *prev_row = (row == 0) ? zero_row : filtered + (row - 1) * row_stride + 1;
+        if (!unfilter_row(curr_row, prev_row, width, filtered[row * row_stride]))
+            return 0;
+
+        for (siz i = 0; i < width; i++, pixel_pos++) {
+            byte current = curr_row[i] >= threshold;
+            if (current != prev) {
+                cnts[k++] = (uint)(pixel_pos - last_switch_pos);
+                last_switch_pos = pixel_pos;
+                prev = current;
+            }
+        }
+    }
+    cnts[k++] = (uint)(pixel_pos - last_switch_pos);
+    return k;
+}
+
 bool rleFromPngFile(RLE *R, const char *path, int threshold) {
     FILE *f = fopen(path, "rb");
     if (!f) return false;
@@ -83,45 +246,22 @@ bool rleFromPngBytes(
     // Build RLE in row-major order (will transpose at end)
     RLE row_major;
     uint *cnts = rleInit(&row_major, width, height, height * width + 1);
-    siz k = 0;
 
-    byte prev = 0;  // Start with bg=0, so first-fg emits 0-length bg run automatically
-    siz last_switch_pos = 0;
-    siz pixel_pos = 0;
-
-    for (siz row = 0; row < height; row++) {
-        byte *curr_row = filtered + row * row_stride + 1;  // +1 skips filter byte
-        byte *prev_row = (row == 0) ? zero_row : filtered + (row - 1) * row_stride + 1;
-        byte filter_type = filtered[row * row_stride];
-
-        // Apply unfilter in-place
-        switch (filter_type) {
-            case 0: unfilter_none(curr_row, prev_row, width); break;
-            case 1: unfilter_sub(curr_row, prev_row, width); break;
-            case 2: unfilter_up(curr_row, prev_row, width); break;
-            case 3: unfilter_avg(curr_row, prev_row, width); break;
-            case 4: unfilter_paeth(curr_row, prev_row, width); break;
-            default:
-                free(filtered);
-                free(zero_row);
-                rleFree(&row_major);
-                return false;
-        }
-
-        // Build RLE - only do work at transitions
-        for (siz i = 0; i < width; i++) {
-            byte current = curr_row[i] > threshold;
-            if (current != prev) {
-                cnts[k++] = (uint)(pixel_pos - last_switch_pos);
-                last_switch_pos = pixel_pos;
-                prev = current;
-            }
-            pixel_pos++;
-        }
+    siz k;
+    if (threshold == 1) {
+        k = scan_rows_nonzero(filtered, zero_row, cnts, width, height, row_stride);
+    } else if (threshold == 128) {
+        k = scan_rows_thresh128(filtered, zero_row, cnts, width, height, row_stride);
+    } else {
+        k = scan_rows_generic(filtered, zero_row, cnts, width, height, row_stride, threshold);
     }
 
-    // Final run
-    cnts[k++] = (uint)(pixel_pos - last_switch_pos);
+    if (k == 0) {
+        free(filtered);
+        free(zero_row);
+        rleFree(&row_major);
+        return false;
+    }
 
     free(filtered);
     free(zero_row);
