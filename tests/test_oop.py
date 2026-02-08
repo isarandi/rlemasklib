@@ -1,3 +1,4 @@
+import os
 import cv2
 import numpy as np
 from rlemasklib.oop import RLEMask
@@ -258,6 +259,7 @@ def test_merge_multibool():
 
 
 def test_circle():
+    import tempfile
     import imageio.v2 as imageio
 
     rle = RLEMask.from_circle([499 / 2, 499 / 2], 199, imshape=(500, 500))
@@ -268,7 +270,7 @@ def test_circle():
     rle2 = RLEMask.from_polygon(poly, imshape=(500, 500))
 
     mask = np.array(rle2 - rle)
-    imageio.imwrite("/tmp/circle.png", mask * 255)
+    imageio.imwrite(os.path.join(tempfile.gettempdir(), "circle.png"), mask * 255)
 
 
 def test_iou():
