@@ -50,7 +50,7 @@ cdef extern from "encode_decode.h" nogil:
     void rleEncode(RLE *R, const byte *M, siz h, siz w, siz n)
     bool rleDecode(const RLE *R, byte *mask, siz n, byte value)
     char *rleToString(const RLE *R)
-    void rleFrString(RLE *R, const char *s, siz h, siz w)
+    bool rleFrString(RLE *R, const char *s, siz h, siz w)
 
 cdef extern from "boolfuncs.h" nogil:
     void rleComplement(const RLE *R_in, RLE *R_out, siz n)
@@ -199,7 +199,9 @@ def _from_leb128_dicts(rleObjs):
     for i, obj in enumerate(rleObjs):
         py_string = str.encode(obj['counts']) if type(obj['counts']) == str else obj['counts']
         c_string = py_string
-        rleFrString(<RLE *> &Rs._R[i], <const  char *> c_string, obj['size'][0], obj['size'][1])
+        if not rleFrString(<RLE *> &Rs._R[i], <const  char *> c_string, obj['size'][0], obj['size'][1]):
+            raise ValueError(
+                "Invalid RLE string: sum of run lengths does not match h*w")
 
     return Rs
 

@@ -12,7 +12,7 @@ void rlesToLabelMapZeroInit(const RLE **R, byte *M, siz n);
 siz rleFromLabelMap(const byte *M, siz h, siz w, RLE *Rs);
 
 char *rleToString(const RLE *R);
-void rleFrString(RLE *R, const char *s, siz h, siz w);
+bool rleFrString(RLE *R, const char *s, siz h, siz w);
 
 
 

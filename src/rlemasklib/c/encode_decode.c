@@ -188,10 +188,10 @@ bool rleDecode(const RLE *R, byte *M, siz n, byte value) {
     for (siz i = 0; i < n; i++) {
         for (siz j = 0; j < (R[i].m/2)*2; j++) {
             uint cnt = R[i].cnts[j];
+            if (M + cnt > end) {
+                return false;
+            }
             if (j%2) {
-                if (M + cnt > end) {
-                    return false;
-                }
                 memset(M, value, cnt);
             }
             M += cnt;
@@ -206,10 +206,14 @@ bool rleDecodeStrided(const RLE *R, byte *M, siz row_stride, siz col_stride, byt
     // Background pixels are not touched.
     siz h = R->h;
     siz w = R->w;
+    siz total = h * w;
     siz pos = 0;  // linear position in column-major order
 
     for (siz j = 0; j < (R->m/2)*2; j++) {
         uint cnt = R->cnts[j];
+        if (pos + cnt > total) {
+            return false;
+        }
         if (j % 2) {  // foreground run
             for (siz k = 0; k < cnt; k++) {
                 siz col = pos / h;
@@ -392,7 +396,7 @@ void leb128_decode(const char *s, siz n, int **cnts_out, siz *m_out) {
     while (p < n) {
         long x = 0; // the run length (difference)
         siz k = 0; // the number of bytes (of which 7 bits and a continuation bit are used) in the run length
-        while (true) {
+        while (p < n) {
             char c = s[p];
             x |= (long) (c & 0x7f) << k; // take the last 7 bits of the char and shift them to the right position
             bool more = c & 0x80; // check the continuation bit
@@ -455,7 +459,7 @@ void leb_coco_decode(const char *s, siz n, int **cnts_out, siz *m_out) {
     while (p < n) {
         long x = 0; // the run length (difference)
         siz k = 0; // the number of bytes (of which 7 bits and a continuation bit are used) in the run length
-        while (true) {
+        while (p < n) {
             char c = s[p] - 48;
             x |= (long) (c & 0x1f) << k; // take the last 7 bits of the char and shift them to the right position
             bool more = c & 0x20; // check the continuation bit
@@ -475,10 +479,10 @@ void leb_coco_decode(const char *s, siz n, int **cnts_out, siz *m_out) {
     *m_out = m;
 }
 
-void rleFrString(RLE *R, const char *s, siz h, siz w) {
+bool rleFrString(RLE *R, const char *s, siz h, siz w) {
     if (h == 0 || w == 0) {
         rleInit(R, h, w, 0);
-        return;
+        return true;
     }
 
     uint *cnts = rleInit(R, h, w, strlen(s));
@@ -490,7 +494,7 @@ void rleFrString(RLE *R, const char *s, siz h, siz w) {
         while (true) {
             char c = s[p];
             if (!c) {
-                return; // unexpected end of string, last char promised more to come, but lied. Malformed input!
+                goto done; // unexpected end of string, last char promised more to come. Malformed input.
             }
             c -= 48; // subtract the offset, so the range is 0-63
             x |= (long) (c & 0x1f) << k; // take the last 5 bits of the char and shift them to the right position
@@ -510,7 +514,18 @@ void rleFrString(RLE *R, const char *s, siz h, siz w) {
         }
         cnts[m++] = x;
     }
+done:
     rleRealloc(R, m);
+
+    // Validate: sum of decoded counts must equal h*w
+    siz total = 0;
+    for (siz i = 0; i < m; i++) total += R->cnts[i];
+    if (total != h * w) {
+        rleFree(R);
+        rleInit(R, h, w, 0);
+        return false;
+    }
+    return true;
 }
 
 

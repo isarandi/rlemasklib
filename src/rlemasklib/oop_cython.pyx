@@ -59,7 +59,7 @@ cdef extern from "encode_decode.h" nogil:
     bool rleDecodeBroadcast(const RLE *R, byte *M, siz num_channels, byte value)
     bool rleDecodeMultiValue(const RLE *R, byte *M, siz num_channels, const byte *values)
     char *rleToString(const RLE *R)
-    void rleFrString(RLE *R, const char *s, siz h, siz w)
+    bool rleFrString(RLE *R, const char *s, siz h, siz w)
     void rlesToLabelMapZeroInit(const RLE **R, byte *label_map, siz n)
     siz rleFromLabelMap(const byte *M, siz h, siz w, RLE *Rs)
 
@@ -249,14 +249,30 @@ cdef class RLECy:
 
     cpdef _i_from_dict(self, d: dict):
         cdef uint[::1] data
+        cdef siz h = d["size"][0]
+        cdef siz w = d["size"][1]
+        if h * w > <siz>0xFFFFFFFF:
+            raise ValueError(
+                f"Image dimensions {h}x{w} exceed maximum supported size "
+                f"(h*w must fit in uint32, got {h * w})")
         if 'counts' in d:
-            rleFrString(&self.r, <const char *> d["counts"], d["size"][0], d["size"][1])
+            counts = d["counts"]
+            if isinstance(counts, str):
+                counts = counts.encode('utf-8')
+            if not rleFrString(&self.r, <const char *> counts, h, w):
+                raise ValueError(
+                    "Invalid RLE string: sum of run lengths does not match h*w")
         elif 'ucounts' in d:
             data = np.array(d["ucounts"], dtype=np.uint32)
-            rleFrCnts(&self.r, d["size"][0], d["size"][1], len(d["ucounts"]), &data[0])
+            rleFrCnts(&self.r, h, w, len(d["ucounts"]), &data[0])
         elif 'zcounts' in d:
             counts = zlib.decompress(d["zcounts"])
-            rleFrString(&self.r, <const char *> counts, d["size"][0], d["size"][1])
+            if not rleFrString(&self.r, <const char *> counts, h, w):
+                raise ValueError(
+                    "Invalid RLE string: sum of run lengths does not match h*w")
+        else:
+            raise ValueError(
+                "RLE dict must contain 'counts', 'ucounts', or 'zcounts' key")
 
     def _i_from_bbox(self, bbox, imshape):
         cdef np.ndarray[np.double_t, ndim=1] bbox_double = np.ascontiguousarray(
