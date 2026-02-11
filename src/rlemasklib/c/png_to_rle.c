@@ -425,14 +425,14 @@ siz rlesFromLabelMapPngBytes(RLE *Rs, const byte *png_data, siz png_len) {
     siz width, height;
     byte *filtered;
     if (!parse_png_grayscale(png_data, png_len, &width, &height, &filtered)) {
-        return 0;
+        return (siz)-1;
     }
 
     siz row_stride = 1 + width;
     byte *zero_row = calloc(width, 1);
     if (!zero_row) {
         free(filtered);
-        return 0;
+        return (siz)-1;
     }
 
     // State per label for row-major RLEs
@@ -462,7 +462,7 @@ siz rlesFromLabelMapPngBytes(RLE *Rs, const byte *png_data, siz png_len) {
                 for (int i = 0; i < 255; i++) {
                     if (cap[i] > 0) rleFree(&row_major[i]);
                 }
-                return 0;
+                return (siz)-1;
         }
 
         // Build RLEs for each label
@@ -529,7 +529,7 @@ siz rlesFromLabelMapPngBytes(RLE *Rs, const byte *png_data, siz png_len) {
 
 siz rlesFromLabelMapPngFile(RLE *Rs, const char *path) {
     FILE *f = fopen(path, "rb");
-    if (!f) return 0;
+    if (!f) return (siz)-1;
 
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
@@ -537,19 +537,19 @@ siz rlesFromLabelMapPngFile(RLE *Rs, const char *path) {
 
     if (size <= 0) {
         fclose(f);
-        return 0;
+        return (siz)-1;
     }
 
     byte *data = malloc(size);
     if (!data) {
         fclose(f);
-        return 0;
+        return (siz)-1;
     }
 
     if (fread(data, 1, size, f) != (size_t)size) {
         free(data);
         fclose(f);
-        return 0;
+        return (siz)-1;
     }
     fclose(f);
 

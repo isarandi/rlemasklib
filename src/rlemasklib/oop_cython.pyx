@@ -1240,6 +1240,9 @@ cdef class RLECy:
         # is the label from 1 to n, where n is the number of RLEs
         # and bg remains 0
 
+        if len(rles) == 0:
+            raise ValueError("Cannot create label map from empty sequence of RLEs")
+
         cdef const RLE **rles_ptr = <const RLE **> malloc(len(rles) * sizeof(RLE *))
         if not rles_ptr:
             raise MemoryError("Failed to allocate memory for RLE pointers")
@@ -1266,8 +1269,8 @@ cdef class RLECy:
         cdef siz h = lm.shape[0]
         cdef siz w = lm.shape[1]
 
-        # Allocate array of 255 RLEs
-        cdef RLE *Rs = <RLE *> malloc(255 * sizeof(RLE))
+        # Allocate zero-initialized array of 255 RLEs (calloc ensures cnts/alloc are NULL)
+        cdef RLE *Rs = <RLE *> calloc(255, sizeof(RLE))
         if not Rs:
             raise MemoryError("Failed to allocate memory for RLEs")
 
@@ -1280,9 +1283,10 @@ cdef class RLECy:
             for i in range(255):
                 if Rs[i].cnts != NULL:  # Active label
                     result.append((i + 1, RLECy._r_from_C_rle(&Rs[i], steal=True)))
-                # Unused labels have cnts=NULL, nothing to free
             return result
         finally:
+            for i in range(255):
+                rleFree(&Rs[i])
             free(Rs)
 
     @staticmethod
@@ -1294,14 +1298,14 @@ cdef class RLECy:
         Returns list of (label, RLECy) for non-empty labels.
         """
         cdef bytes path_bytes = path.encode('utf-8')
-        cdef RLE *Rs = <RLE *> malloc(255 * sizeof(RLE))
+        cdef RLE *Rs = <RLE *> calloc(255, sizeof(RLE))
         if not Rs:
             raise MemoryError("Failed to allocate memory for RLEs")
 
         cdef siz n_active
         try:
             n_active = rlesFromLabelMapPngFile(Rs, <const char *> path_bytes)
-            if n_active == 0:
+            if n_active == <siz>-1:
                 raise ValueError("Failed to read PNG (must be 8-bit grayscale)")
 
             result = []
@@ -1310,6 +1314,8 @@ cdef class RLECy:
                     result.append((i + 1, RLECy._r_from_C_rle(&Rs[i], steal=True)))
             return result
         finally:
+            for i in range(255):
+                rleFree(&Rs[i])
             free(Rs)
 
     @staticmethod
@@ -1321,14 +1327,14 @@ cdef class RLECy:
         Returns list of (label, RLECy) for non-empty labels.
         """
         cdef const byte[::1] data_view = data
-        cdef RLE *Rs = <RLE *> malloc(255 * sizeof(RLE))
+        cdef RLE *Rs = <RLE *> calloc(255, sizeof(RLE))
         if not Rs:
             raise MemoryError("Failed to allocate memory for RLEs")
 
         cdef siz n_active
         try:
             n_active = rlesFromLabelMapPngBytes(Rs, &data_view[0], len(data))
-            if n_active == 0:
+            if n_active == <siz>-1:
                 raise ValueError("Failed to decode PNG (must be 8-bit grayscale)")
 
             result = []
@@ -1337,6 +1343,8 @@ cdef class RLECy:
                     result.append((i + 1, RLECy._r_from_C_rle(&Rs[i], steal=True)))
             return result
         finally:
+            for i in range(255):
+                rleFree(&Rs[i])
             free(Rs)
 
     def roll(self):
