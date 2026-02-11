@@ -16,7 +16,7 @@ For rotation, scaling, shearing, translation::
         [0.1,  0.9, 20]
     ], dtype=np.float32)
 
-    warped = mask.warp_affine(M, dst_shape=(480, 640))
+    warped = mask.warp_affine(M, output_imshape=(480, 640))
 
 Perspective transform
 ---------------------
@@ -30,7 +30,7 @@ For 3x3 homography matrices::
         [0.0001, 0.0002, 1]
     ], dtype=np.float32)
 
-    warped = mask.warp_perspective(H, dst_shape=(480, 640))
+    warped = mask.warp_perspective(H, output_imshape=(480, 640))
 
 From OpenCV
 -----------
@@ -44,11 +44,11 @@ If you have a transform matrix from OpenCV::
     dst_pts = np.array([[10, 10], [110, 20], [5, 115]], dtype=np.float32)
     M = cv2.getAffineTransform(src_pts, dst_pts)
 
-    warped = mask.warp_affine(M, dst_shape)
+    warped = mask.warp_affine(M, output_imshape)
 
     # Or perspective from 4 points
     H = cv2.getPerspectiveTransform(src_4pts, dst_4pts)
-    warped = mask.warp_perspective(H, dst_shape)
+    warped = mask.warp_perspective(H, output_imshape)
 
 Resize
 ------
@@ -61,7 +61,7 @@ Simple scaling is a special case::
     # Or use warp_affine with a scale matrix
     scale = 0.5
     M = np.array([[scale, 0, 0], [0, scale, 0]], dtype=np.float32)
-    resized = mask.warp_affine(M, dst_shape)
+    resized = mask.warp_affine(M, output_imshape)
 
 Decode-warp-encode fallback
 ---------------------------

@@ -30,7 +30,7 @@ With COCO-format dicts::
 
     import rlemasklib
 
-    iou_matrix = rlemasklib.iou([mask1_dict, mask2_dict], [mask3_dict, mask4_dict])
+    iou = rlemasklib.iou([mask1_dict, mask2_dict])
 
 Manual computation
 ------------------

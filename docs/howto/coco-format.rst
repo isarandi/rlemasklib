@@ -46,8 +46,9 @@ For batch operations without creating objects::
     array = rlemasklib.decode(coco_dict)
 
     # Operations on dicts
-    union_dict = rlemasklib.merge([dict1, dict2], intersect=False)
-    intersection_dict = rlemasklib.merge([dict1, dict2], intersect=True)
+    from rlemasklib import BoolFunc
+    union_dict = rlemasklib.merge([dict1, dict2], BoolFunc.UNION)
+    intersection_dict = rlemasklib.merge([dict1, dict2], BoolFunc.INTERSECTION)
 
 Uncompressed counts
 -------------------
@@ -66,7 +67,7 @@ Extra compression
 For even smaller storage, gzip the compressed counts::
 
     # Returns dict with "zcounts" instead of "counts" (~40% smaller)
-    compressed_dict = mask.to_dict(compressed=True)
+    compressed_dict = mask.to_dict(zlevel=6)
 
     # Loading auto-detects the format
     mask = RLEMask.from_dict(compressed_dict)
