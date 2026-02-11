@@ -1,4 +1,4 @@
-#include <stdlib.h> // for malloc, free
+#include <stdlib.h> // for free
 #include <stdbool.h> // for bool
 #include <math.h> // for fmax, fmin
 #include "basics.h"
@@ -160,8 +160,8 @@ static int _uintCompare(const void *a, const void *b) {
 void rleFrPoly(RLE *R, const double *xy, siz k, siz h, siz w) {
     /* upsample and get discrete points densely along entire boundary */
     double scale = 5;
-    int *x = malloc(sizeof(int) * (k + 1));
-    int *y = malloc(sizeof(int) * (k + 1));
+    int *x = safe_malloc(sizeof(int) * (k + 1));
+    int *y = safe_malloc(sizeof(int) * (k + 1));
     for (siz j = 0; j < k; j++) {
         x[j] = (int) (scale * xy[j * 2 + 0] + .5);
     }
@@ -175,8 +175,8 @@ void rleFrPoly(RLE *R, const double *xy, siz k, siz h, siz w) {
     for (siz j = 0; j < k; j++) {
         m += uintMax(abs(x[j] - x[j + 1]), abs(y[j] - y[j + 1])) + 1;
     }
-    int *u = malloc(sizeof(int) * m);
-    int *v = malloc(sizeof(int) * m);
+    int *u = safe_malloc(sizeof(int) * m);
+    int *v = safe_malloc(sizeof(int) * m);
     m = 0;
     for (siz j = 0; j < k; j++) {
         int xs = x[j], xe = x[j + 1], ys = y[j], ye = y[j + 1];
@@ -213,8 +213,8 @@ void rleFrPoly(RLE *R, const double *xy, siz k, siz h, siz w) {
     m = 0;
     free(x);
     free(y);
-    x = malloc(sizeof(int) * k);
-    y = malloc(sizeof(int) * k);
+    x = safe_malloc(sizeof(int) * k);
+    y = safe_malloc(sizeof(int) * k);
     for (siz j = 1; j < k; j++) {
         if (u[j] != u[j - 1]) {
             double xd = u[j] < u[j - 1] ? u[j] : u[j] - 1;

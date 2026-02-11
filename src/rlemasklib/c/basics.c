@@ -1,8 +1,6 @@
-#include <stdlib.h> // for malloc, free...
 #include <string.h> // for memcpy
 #include <stdbool.h> // for bool
 #include <stddef.h> // for ptrdiff_t
-#include <assert.h> // for assert
 #include "basics.h"
 
 
@@ -15,7 +13,7 @@ uint *rleInit(RLE *R, siz h, siz w, siz m) {
         R->alloc = NULL;
         R->cnts = NULL;
     } else {
-        R->alloc = malloc(sizeof(uint) * (m+2));
+        R->alloc = safe_malloc(sizeof(uint) * (m+2));
         R->cnts = R->alloc + 1;
         //R->capacity = m + 2;
     }
@@ -47,10 +45,13 @@ void rleFree(RLE *R) {
 }
 
 static uint *rleRealloc(RLE *R, siz m) {
-    assert(rleOwnsData(R) && "Cannot realloc borrowed RLE");
+    if (!rleOwnsData(R)) {
+        fprintf(stderr, "rlemasklib: Cannot realloc borrowed RLE\n");
+        abort();
+    }
     R->m = m;
     ptrdiff_t diff = R->cnts - R->alloc;
-    R->alloc = realloc(R->alloc, sizeof(uint) * (m + diff));
+    R->alloc = safe_realloc(R->alloc, sizeof(uint) * (m + diff));
     R->cnts = R->alloc + diff;
     return R->cnts;
 }
@@ -70,7 +71,7 @@ void rleSwap(RLE *R, RLE *M) {
 
 
 void rlesInit(RLE **R, siz n) {
-    *R = calloc(n, sizeof(RLE));
+    *R = safe_calloc(n, sizeof(RLE));
 }
 
 void rlesFree(RLE **R, siz n) {

@@ -1,4 +1,4 @@
-#include <stdlib.h> // for malloc, free
+#include <stdlib.h> // for free
 #include <math.h> // for fmin, fmax
 #include "minmax.h"
 #include "shapes.h"
@@ -9,9 +9,9 @@ void rleIou(RLE *dt, RLE *gt, siz m, siz n, byte *iscrowd, double *o) {
     siz g, d;
     BB db, gb;
     int crowd;
-    db = malloc(sizeof(double) * m * 4);
+    db = safe_malloc(sizeof(double) * m * 4);
     rleToBbox(dt, db, m);
-    gb = malloc(sizeof(double) * n * 4);
+    gb = safe_malloc(sizeof(double) * n * 4);
     rleToBbox(gt, gb, n);
     bbIou(db, gb, m, n, iscrowd, o);
     free(db);

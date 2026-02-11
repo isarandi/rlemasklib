@@ -1,4 +1,4 @@
-#include <stdlib.h> // for malloc
+#include <stdlib.h> // for free
 #include <math.h>    // for pow, sqrt
 #include "basics.h"
 #include "minmax.h"
@@ -106,7 +106,7 @@ void rleNonZeroIndices(const RLE *R, uint **coords_out, siz *n_out) {
 
     uint area;
     rleArea(R, 1, &area);
-    uint *coords = malloc(sizeof(uint) * area * 2);
+    uint *coords = safe_malloc(sizeof(uint) * area * 2);
 
     uint pos = 0;
     siz i_out = 0;

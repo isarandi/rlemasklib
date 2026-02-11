@@ -1,8 +1,6 @@
 #include <stdbool.h> // for bool
 #include <stddef.h> // for NULL
-#include <stdlib.h> // for malloc, free
 #include <string.h> // for memcpy
-#include <assert.h> // for assert
 #include "basics.h"
 #include "minmax.h"
 #include "pad_crop.h"
@@ -364,7 +362,6 @@ void rleZeroPad(const RLE *R, RLE *M, siz n, const uint *pad_amounts) {
 void rleZeroPadInplace(RLE *R, siz n, const uint *pad_amounts) {
     // pad_amounts is four values: left, right, top, bottom
     for (siz i = 0; i < n; i++) {
-        assert(rleOwnsData(&R[i]) && "Cannot pad borrowed RLE in-place");
         uint h = R[i].h;
         uint w = R[i].w;
         siz m = R[i].m;
@@ -382,6 +379,11 @@ void rleZeroPadInplace(RLE *R, siz n, const uint *pad_amounts) {
             rleFree(&R[i]);
             rleZeros(&R[i], h_out, w_out);
             continue;
+        }
+
+        if (!rleOwnsData(&R[i])) {
+            fprintf(stderr, "rlemasklib: Cannot pad borrowed RLE in-place\n");
+            abort();
         }
 
         R[i].h = h_out;
@@ -436,7 +438,7 @@ void rleZeroPadInplace(RLE *R, siz n, const uint *pad_amounts) {
             tmp = NULL;
         } else {
             // We need to allocate a new RLE
-            tmp = malloc(sizeof(RLE));
+            tmp = safe_malloc(sizeof(RLE));
             cnts = rleInit(tmp, h_out, w_out, m_out);
         }
 

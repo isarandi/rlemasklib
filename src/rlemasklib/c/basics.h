@@ -2,6 +2,35 @@
 
 #include <stdbool.h> // for bool
 #include <stdint.h>  // for uint32_t, uint64_t
+#include <stdio.h>   // for fprintf, stderr
+#include <stdlib.h>  // for malloc, realloc, calloc, free, abort
+
+static inline void *safe_malloc(size_t size) {
+    void *ptr = malloc(size);
+    if (!ptr && size > 0) {
+        fprintf(stderr, "rlemasklib: malloc(%zu) failed\n", size);
+        abort();
+    }
+    return ptr;
+}
+
+static inline void *safe_realloc(void *ptr, size_t size) {
+    void *new_ptr = realloc(ptr, size);
+    if (!new_ptr && size > 0) {
+        fprintf(stderr, "rlemasklib: realloc(%zu) failed\n", size);
+        abort();
+    }
+    return new_ptr;
+}
+
+static inline void *safe_calloc(size_t count, size_t size) {
+    void *ptr = calloc(count, size);
+    if (!ptr && count > 0 && size > 0) {
+        fprintf(stderr, "rlemasklib: calloc(%zu, %zu) failed\n", count, size);
+        abort();
+    }
+    return ptr;
+}
 
 typedef uint32_t uint;
 typedef uint64_t siz;

@@ -93,7 +93,7 @@ void rleLargestInteriorRectangle(const RLE *R_, uint* rect_out) {
 
     // start_x is the x position where the currently active horizontal run started
     // if a certain row has no active run, it is UINT_MAX
-    uint *start_x = malloc(h * sizeof(uint));
+    uint *start_x = safe_malloc(h * sizeof(uint));
     for (siz i = 0; i < h; i++) {
         start_x[i] = UINT_MAX;
     }
@@ -277,7 +277,7 @@ void rleLargestInteriorRectangleAspect(const RLE *R_, double* rect_out, double a
 
     // start_x is the x position where the currently active horizontal run started
     // if a certain row has no active run, it is UINT_MAX
-    uint *start_x = malloc(h * sizeof(uint));
+    uint *start_x = safe_malloc(h * sizeof(uint));
     for (siz i = 0; i < h; i++) {
         start_x[i] = UINT_MAX;
     }
@@ -521,7 +521,7 @@ void rleLargestInteriorRectangleAroundCenter(
     uint bbox[4];
     rleToUintBbox(R, bbox);
     siz histsize = uintMin(icx - bbox[0] + 1, bbox[0] + bbox[2] - icx);
-    uint *hist = malloc(histsize * sizeof(uint));
+    uint *hist = safe_malloc(histsize * sizeof(uint));
     uint max_hist = uintMin(icy - bbox[1], bbox[1] + bbox[3] - 1 - icy);
     for (siz i = 0; i < histsize; i++) {
         hist[i] = max_hist;
@@ -703,7 +703,7 @@ static uint uintAbsDiff(uint a, uint b) {
 
 
 static void stackInit(struct Stack *stack, siz n) {
-    stack->start = malloc(n * sizeof(uint));
+    stack->start = safe_malloc(n * sizeof(uint));
     stack->end = stack->start + n;
     stack->p = stack->end;
 }

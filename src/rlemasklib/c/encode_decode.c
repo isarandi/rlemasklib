@@ -1,5 +1,4 @@
 #include <string.h> // for memset
-#include <stdlib.h> // for malloc, realloc, free
 #include <stdbool.h> // for bool
 
 #ifdef __SSE2__
@@ -324,7 +323,7 @@ char *rleToString(const RLE *R) {
     // experimentally, in a realistic human mask dataset (mixed sources) the factor for the 99th percentile is
     // still below 2.0, so we use that as a heuristic. The average is around 1.5.
     siz alloc_size = 2 * m * sizeof(char);
-    char *s = malloc(alloc_size); // optimistic allocation
+    char *s = safe_malloc(alloc_size); // optimistic allocation
     siz p = 0;
     bool more;
     for (siz i = 0; i < m; i++) {
@@ -345,12 +344,12 @@ char *rleToString(const RLE *R) {
 
             if (p >= alloc_size) {
                 alloc_size *= 2;
-                s = realloc(s, alloc_size);
+                s = safe_realloc(s, alloc_size);
             }
             s[p++] = c + 48;  // ascii 48 is '0'. 48-111 is the range of ascii chars we use
         } while (more);
     }
-    s = realloc(s, sizeof(char) * (p + 1));
+    s = safe_realloc(s, sizeof(char) * (p + 1));
     s[p] = 0; // null-terminate the string
     return s;
 }
@@ -359,7 +358,7 @@ char *rleToString(const RLE *R) {
 
 void leb128_encode(const int *cnts, siz m, char **out, siz *n_out) {
     siz alloc_size = 2 * m * sizeof(char);
-    char *s = malloc(alloc_size); // optimistic allocation
+    char *s = safe_malloc(alloc_size); // optimistic allocation
     siz p = 0;
     bool more;
     for (siz i = 0; i < m; i++) {
@@ -376,12 +375,12 @@ void leb128_encode(const int *cnts, siz m, char **out, siz *n_out) {
 
             if (p >= alloc_size) {
                 alloc_size *= 2;
-                s = realloc(s, alloc_size);
+                s = safe_realloc(s, alloc_size);
             }
             s[p++] = c;
         } while (more);
     }
-    s = realloc(s, sizeof(char) * p);
+    s = safe_realloc(s, sizeof(char) * p);
     *out = s;
     *n_out = p;
 }
@@ -389,7 +388,7 @@ void leb128_encode(const int *cnts, siz m, char **out, siz *n_out) {
 void leb128_decode(const char *s, siz n, int **cnts_out, siz *m_out) {
     siz p = 0;
     siz m = 0;
-    int *cnts = malloc(sizeof(int) * n);
+    int *cnts = safe_malloc(sizeof(int) * n);
     while (p < n) {
         long x = 0; // the run length (difference)
         siz k = 0; // the number of bytes (of which 7 bits and a continuation bit are used) in the run length
@@ -422,7 +421,7 @@ void leb_coco_encode(const int *cnts, siz m, char **out, siz *n_out) {
     // experimentally, in a realistic human mask dataset (mixed sources) the factor for the 99th percentile is
     // still below 2.0, so we use that as a heuristic. The average is around 1.5.
     siz alloc_size = 2 * m * sizeof(char);
-    char *s = malloc(alloc_size); // optimistic allocation
+    char *s = safe_malloc(alloc_size); // optimistic allocation
     siz p = 0;
     bool more;
     for (siz i = 0; i < m; i++) {
@@ -439,12 +438,12 @@ void leb_coco_encode(const int *cnts, siz m, char **out, siz *n_out) {
 
             if (p >= alloc_size) {
                 alloc_size *= 2;
-                s = realloc(s, alloc_size);
+                s = safe_realloc(s, alloc_size);
             }
             s[p++] = c + 48;
         } while (more);
     }
-    s = realloc(s, sizeof(char) * p);
+    s = safe_realloc(s, sizeof(char) * p);
     *out = s;
     *n_out = p;
 }
@@ -452,7 +451,7 @@ void leb_coco_encode(const int *cnts, siz m, char **out, siz *n_out) {
 void leb_coco_decode(const char *s, siz n, int **cnts_out, siz *m_out) {
     siz p = 0;
     siz m = 0;
-    int *cnts = malloc(sizeof(int) * n);
+    int *cnts = safe_malloc(sizeof(int) * n);
     while (p < n) {
         long x = 0; // the run length (difference)
         siz k = 0; // the number of bytes (of which 7 bits and a continuation bit are used) in the run length

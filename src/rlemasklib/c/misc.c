@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <math.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -111,7 +112,7 @@ void rleConcatHorizontal(const RLE **R, RLE *M, siz n) {
 }
 
 void rleConcatVertical(const RLE **R, RLE *M, siz n) {
-    RLE *paddedR = malloc(sizeof(RLE) * n);
+    RLE *paddedR = safe_malloc(sizeof(RLE) * n);
 
     siz h_out = 0;
     for (siz i = 0; i < n; i++) {

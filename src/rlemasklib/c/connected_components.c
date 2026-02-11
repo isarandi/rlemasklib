@@ -70,7 +70,7 @@ CCState* rleConnectedComponentsBegin(
     int **bboxes_out,
     double **centroids_out
 ) {
-    CCState *state = malloc(sizeof(CCState));
+    CCState *state = safe_malloc(sizeof(CCState));
     state->R_in = R_in;
     state->R_split = NULL;
     state->R = NULL;
@@ -94,8 +94,8 @@ CCState* rleConnectedComponentsBegin(
     state->uf = uf;
     siz m = state->R->m;
 
-    state->new_labels = malloc(sizeof(uint) * (m / 2));
-    state->component_run_counts = malloc(sizeof(uint) * (m / 2));
+    state->new_labels = safe_malloc(sizeof(uint) * (m / 2));
+    state->component_run_counts = safe_malloc(sizeof(uint) * (m / 2));
 
     siz n_components = _rleAssignComponentLabels(
         state->R, uf, min_size,
@@ -112,13 +112,13 @@ CCState* rleConnectedComponentsBegin(
     }
 
     // Compute stats
-    state->stats = malloc(sizeof(struct RLEComponentStats) * n_components);
+    state->stats = safe_malloc(sizeof(struct RLEComponentStats) * n_components);
     _rleComputeComponentStats(state->R, state->new_labels, n_components, state->stats);
 
     // Copy to output arrays (caller owns these)
-    *areas_out = malloc(sizeof(siz) * n_components);
-    *bboxes_out = malloc(sizeof(int) * n_components * 4);
-    *centroids_out = malloc(sizeof(double) * n_components * 2);
+    *areas_out = safe_malloc(sizeof(siz) * n_components);
+    *bboxes_out = safe_malloc(sizeof(int) * n_components * 4);
+    *centroids_out = safe_malloc(sizeof(double) * n_components * 2);
 
     for (siz i = 0; i < n_components; i++) {
         (*areas_out)[i] = state->stats[i].area;
@@ -151,7 +151,7 @@ void rleConnectedComponentsExtract(
 
     // Count selected and build old->new index mapping
     siz n_selected = 0;
-    uint *old_to_new = malloc(sizeof(uint) * state->n_components);
+    uint *old_to_new = safe_malloc(sizeof(uint) * state->n_components);
     for (siz i = 0; i < state->n_components; i++) {
         if (selected[i]) {
             old_to_new[i] = n_selected++;
@@ -168,7 +168,7 @@ void rleConnectedComponentsExtract(
     }
 
     // Recompute run counts for selected components only
-    uint *selected_run_counts = calloc(n_selected, sizeof(uint));
+    uint *selected_run_counts = safe_calloc(n_selected, sizeof(uint));
     for (siz i = 0; i < n_selected; i++) {
         selected_run_counts[i] = 1;  // leading zeros
     }
@@ -194,7 +194,7 @@ void rleConnectedComponentsExtract(
     }
 
     // Track write position for each selected component
-    uint **write_ptrs = malloc(sizeof(uint *) * n_selected);
+    uint **write_ptrs = safe_malloc(sizeof(uint *) * n_selected);
     for (siz i = 0; i < n_selected; i++) {
         write_ptrs[i] = rles_out[i].cnts + 1;
     }
@@ -275,8 +275,8 @@ void rleConnectedComponents(
     }
 
     siz m = R->m;
-    uint *new_labels = malloc(sizeof(uint) * (m / 2));
-    uint *component_run_counts = malloc(sizeof(uint) * (m / 2));
+    uint *new_labels = safe_malloc(sizeof(uint) * (m / 2));
+    uint *component_run_counts = safe_malloc(sizeof(uint) * (m / 2));
 
     siz n_components = _rleAssignComponentLabels(
         R, uf, min_size, new_labels, component_run_counts);
@@ -325,8 +325,8 @@ siz rleConnectedComponentStats(
     }
 
     siz m = R->m;
-    uint *new_labels = malloc(sizeof(uint) * (m / 2));
-    uint *component_run_counts = malloc(sizeof(uint) * (m / 2));
+    uint *new_labels = safe_malloc(sizeof(uint) * (m / 2));
+    uint *component_run_counts = safe_malloc(sizeof(uint) * (m / 2));
 
     siz n_components = _rleAssignComponentLabels(
         R, uf, min_size, new_labels, component_run_counts);
@@ -341,12 +341,12 @@ siz rleConnectedComponentStats(
         return 0;
     }
 
-    struct RLEComponentStats *stats = malloc(sizeof(struct RLEComponentStats) * n_components);
+    struct RLEComponentStats *stats = safe_malloc(sizeof(struct RLEComponentStats) * n_components);
     _rleComputeComponentStats(R, new_labels, n_components, stats);
 
-    *areas_out = malloc(sizeof(siz) * n_components);
-    *bboxes_out = malloc(sizeof(int) * n_components * 4);
-    *centroids_out = malloc(sizeof(double) * n_components * 2);
+    *areas_out = safe_malloc(sizeof(siz) * n_components);
+    *bboxes_out = safe_malloc(sizeof(int) * n_components * 4);
+    *centroids_out = safe_malloc(sizeof(double) * n_components * 2);
 
     for (siz i = 0; i < n_components; i++) {
         (*areas_out)[i] = stats[i].area;
@@ -493,7 +493,7 @@ static struct UnionFindNode *_rleBuildComponentsUF(
     siz h = R->h;
     uint *cnts = R->cnts;
 
-    struct UnionFindNode *uf = calloc(m / 2, sizeof(struct UnionFindNode));
+    struct UnionFindNode *uf = safe_calloc(m / 2, sizeof(struct UnionFindNode));
     for (siz i = 1; i < m; i += 2) {
         uf[i / 2].size = cnts[i];
     }
@@ -556,7 +556,7 @@ static RLE *_rleSplitRunsThatMayBelongToDifferentComponents(const RLE *R, int co
         return NULL;
     }
 
-    RLE *M = malloc(sizeof(RLE));
+    RLE *M = safe_malloc(sizeof(RLE));
     uint *cnts_out = rleInit(M, h, w, m + 2 * n_splits);
     r = 0;
     siz i_out = 0;
@@ -589,7 +589,7 @@ static siz _rleAssignComponentLabels(
     siz m = R->m;
     uint *cnts = R->cnts;
 
-    uint *root_to_component = malloc(sizeof(uint) * (m / 2));
+    uint *root_to_component = safe_malloc(sizeof(uint) * (m / 2));
     for (siz i = 0; i < m / 2; i++) {
         root_to_component[i] = m;
     }
@@ -652,8 +652,8 @@ static void _rleComputeComponentStats(
     }
 
     // Temp storage for max coordinates
-    uint *max_x = calloc(n_components, sizeof(uint));
-    uint *max_y = calloc(n_components, sizeof(uint));
+    uint *max_x = safe_calloc(n_components, sizeof(uint));
+    uint *max_y = safe_calloc(n_components, sizeof(uint));
 
     // Accumulate stats from runs
     siz r = cnts[0];
@@ -757,7 +757,7 @@ static void _rleFillComponentRLEs(
     siz m = R->m;
     uint *cnts = R->cnts;
 
-    uint **write_ptrs = malloc(sizeof(uint *) * n_components);
+    uint **write_ptrs = safe_malloc(sizeof(uint *) * n_components);
     for (siz i = 0; i < n_components; i++) {
         write_ptrs[i] = rles_out[i].cnts + 1;
     }

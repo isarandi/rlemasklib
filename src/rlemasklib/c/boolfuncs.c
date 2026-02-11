@@ -1,9 +1,4 @@
-#include <stdlib.h> // for malloc, free
-#include <stdbool.h> // for bool
 #include <string.h> // for memcpy
-#include <stdint.h> // for uint32_t
-#include <stdio.h> // for printf
-#include <assert.h> // for assert
 #include "boolfuncs.h"
 #include "minmax.h"
 
@@ -108,12 +103,16 @@ void rleComplement(const RLE *R, RLE *M, siz n) {
 
 void rleComplementInplace(RLE *R, siz n) {
     for (siz i = 0; i < n; i++) {
-        assert(rleOwnsData(&R[i]) && "Cannot complement borrowed RLE in-place");
         siz h = R[i].h;
         siz w = R[i].w;
         if (R[i].m == 0 || h == 0 || w == 0) {
             continue;
-        } else if (R[i].m > 0 && R[i].cnts[0] == 0) {
+        }
+        if (!rleOwnsData(&R[i])) {
+            fprintf(stderr, "rlemasklib: Cannot complement borrowed RLE in-place\n");
+            abort();
+        }
+        if (R[i].cnts[0] == 0) {
             // if the first run has size 0, we can just remove it
             R[i].cnts++;
             R[i].m--;
@@ -478,7 +477,7 @@ static void _rleMergeCustom(
 
     uint32_t vs = 0;  // bitset of the current value of each run, first in the lowest bit
 
-    struct uintIterator *iters = malloc(n * sizeof(struct uintIterator)); // the pointer to the next run of each RLE
+    struct uintIterator *iters = safe_malloc(n * sizeof(struct uintIterator)); // the pointer to the next run of each RLE
     for (siz i = 0; i < n; i++) {
         iters[i].curr = R[i]->cnts[0];
         iters[i].next = &R[i]->cnts[1];
@@ -552,7 +551,7 @@ void rleMergeWeightedAtLeast2(
     rleInit(M, h, w, sizMin(h * w + 1, m_total));
 
 
-    struct uintIterator *iters = malloc(n * sizeof(struct uintIterator)); // the pointer to the next run of each RLE
+    struct uintIterator *iters = safe_malloc(n * sizeof(struct uintIterator)); // the pointer to the next run of each RLE
     for (siz i = 0; i < n; i++) {
         iters[i].curr = R[i]->cnts[0];
         iters[i].start = &R[i]->cnts[0];
@@ -638,7 +637,7 @@ void rleMergeAtLeast2(const RLE **R, RLE *M, siz n, uint k) {
 
     uint count = 0;
 
-    struct uintIterator *iters = malloc(n * sizeof(struct uintIterator)); // the pointer to the next run of each RLE
+    struct uintIterator *iters = safe_malloc(n * sizeof(struct uintIterator)); // the pointer to the next run of each RLE
     for (siz i = 0; i < n; i++) {
         iters[i].curr = R[i]->cnts[0];
         iters[i].start = &R[i]->cnts[0];

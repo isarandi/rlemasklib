@@ -1,5 +1,3 @@
-#include <stdlib.h> // for malloc, realloc, free
-#include <stdbool.h> // for bool
 #include <string.h> // for memcpy
 #include "basics.h"
 #include "minmax.h"
@@ -25,7 +23,7 @@ void rleTranspose(const RLE *R, RLE *M) {
     rleFree(&shifted);
 
     uint r = 0;
-    uint *n_switch_per_row = calloc(R->h, sizeof(uint));
+    uint *n_switch_per_row = safe_calloc(R->h, sizeof(uint));
     uint sum = 0;
     for (siz i = 1; i < xor.m; i+=2) {
         r += xor.cnts[i-1];
@@ -38,7 +36,7 @@ void rleTranspose(const RLE *R, RLE *M) {
     }
     siz m_out = sum + 1;
     uint *cnts_out = rleInit(M, R->w, R->h, m_out);
-    uint **ptrs = malloc(R->h * sizeof(uint*));
+    uint **ptrs = safe_malloc(R->h * sizeof(uint*));
 
     uint *ptr = cnts_out;
     for (siz i = 0; i < R->h; i++) {
