@@ -84,8 +84,13 @@ void rleCentroid(const RLE *R, double *xys, siz n) {
             }
         }
 
-        xys[i * 2 + 0] = x / area;
-        xys[i * 2 + 1] = y / area;
+        if (area == 0) {
+            xys[i * 2 + 0] = 0;
+            xys[i * 2 + 1] = 0;
+        } else {
+            xys[i * 2 + 0] = x / area;
+            xys[i * 2 + 1] = y / area;
+        }
     }
 }
 

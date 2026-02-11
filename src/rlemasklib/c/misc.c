@@ -336,6 +336,7 @@ void rleContours(const RLE *R, RLE *M) {
     // undo what we did for `right`
     padded.cnts[0] -= padded.h;
     padded.cnts[padded.m - 1] += padded.h;
+    assert(padded.m % 2 == 1);  // valid RLEs always have odd m
     for (siz i = 1; i < padded.m; i += 2) {
         // every run of 1s of size 1 or 2 becomes 0, otherwise it becomes smaller by 2
         // this way only those points remain that have both an upper and a lower neighbor

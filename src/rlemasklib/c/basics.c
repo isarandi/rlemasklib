@@ -84,10 +84,10 @@ void rlesFree(RLE **R, siz n) {
 
 byte rleGet(const RLE *R, siz i, siz j) {
     siz index = R->h * j + i;
-    for (siz j = 0; j < R->m; j++) {
-        uint cnt = R->cnts[j];
+    for (siz k = 0; k < R->m; k++) {
+        uint cnt = R->cnts[k];
         if (index < cnt) {
-            return j % 2;
+            return k % 2;
         }
         index -= cnt;
     }
@@ -162,7 +162,7 @@ bool rleEqual(const RLE *A, const RLE *B) {
 
     if (A->m != B->m) {
         // the no-pixels mask can be represented either with 0 runs or with 1 run of length 0
-        if (A->h > 0 || A->w > 0) {
+        if (A->h > 0 && A->w > 0) {
             return false;
         }
         if (A->m == 0 && B->m == 1 && B->cnts[0] == 0) {

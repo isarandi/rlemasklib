@@ -509,6 +509,10 @@ void rleLargestInteriorRectangleAroundCenter(
     }
 
     // Round to nearest integer center for the algorithm (integer-centered convention)
+    if (cy < 0 || cx < 0 || (siz)round(cy) >= R->h || (siz)round(cx) >= R->w) {
+        rect_out[0] = rect_out[1] = rect_out[2] = rect_out[3] = 0;
+        return;
+    }
     uint icy = (uint)round(cy);
     uint icx = (uint)round(cx);
 
