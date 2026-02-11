@@ -279,34 +279,25 @@ def any(mask: dict) -> bool:
     """Check if any of the pixels in the mask are foreground.
 
     Args:
-        mask: an RLE mask dictionary (with "counts" or "ucounts")
+        mask: an RLE mask dictionary (with "counts", "ucounts", or "zcounts")
 
     Returns:
         True if any of the pixels are foreground, False otherwise.
     """
-    if 'ucounts' in mask:
-        return len(mask['ucounts']) > 1
-    return len(mask['counts']) > 1
+    return area(mask) > 0
 
 
 def all(mask):
     """Check if all pixels in the mask are foreground.
 
     Args:
-        mask: an RLE mask dictionary (with "counts" or "ucounts")
+        mask: an RLE mask dictionary (with "counts", "ucounts", or "zcounts")
 
     Returns:
         True if all pixels are foreground, False otherwise.
     """
     h, w = mask['size']
-    if h * w == 0:
-        return True
-
-    if 'ucounts' in mask:
-        ucounts = mask['ucounts']
-        return len(ucounts) == 2 and ucounts[0] == 0
-
-    return len(mask['counts']) == 2 and mask['counts'][0] == b'\x00'
+    return area(mask) == h * w
 
 
 def iou(masks):
@@ -353,7 +344,8 @@ def crop(rleObjs, bbox: np.ndarray):
     Returns:
         Either a single RLE or a list of RLEs, depending on input type.
     """
-    bbox = np.asanyarray(bbox, dtype=np.uint32)
+    bbox = np.asanyarray(bbox, dtype=np.int64)
+    bbox = np.clip(bbox, 0, np.iinfo(np.uint32).max).astype(np.uint32)
     if isinstance(rleObjs, (tuple, list)):
         return rlemasklib_cython.crop(rleObjs, bbox)
     else:
@@ -749,7 +741,8 @@ def largest_connected_component(rle: dict, connectivity=4) -> Optional[dict]:
 
 
 def get_imshape(imshape=None, imsize=None):
-    assert imshape is not None or imsize is not None
+    if imshape is None and imsize is None:
+        raise ValueError("Either imshape or imsize must be provided")
     if imshape is None:
         imshape = [imsize[1], imsize[0]]
     return imshape[:2]
