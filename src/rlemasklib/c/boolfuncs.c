@@ -139,6 +139,12 @@ void rleMerge2(const RLE *A, const RLE *B, RLE *M, uint boolfunc) {
         return;
     }
 
+    if (A->m == 0 || B->m == 0) {
+        rleRealloc(M, 1);
+        M->cnts[0] = A->h * A->w;
+        return;
+    }
+
     uint ca = A->cnts[0];
     uint cb = B->cnts[0];
     bool v_prev = false;
@@ -203,6 +209,15 @@ void rleMergeMultiFunc(const RLE **R, RLE *M, siz n, uint* boolfuncs) {
     siz m_total = 0;
     for (siz i = 0; i < n; i++) {
         m_total += R[i]->m;
+    }
+
+    // Guard against malformed inputs with m==0 but h*w>0
+    for (siz i = 0; i < n; i++) {
+        if (R[i]->m == 0) {
+            rleInit(M, h, w, 1);
+            M->cnts[0] = h * w;
+            return;
+        }
     }
 
     RLE tmp;
@@ -294,6 +309,15 @@ void rleMergePtr(const RLE **R, RLE *M, siz n, uint boolfunc) {
         m_total += R[i]->m;
     }
 
+    // Guard against malformed inputs with m==0 but h*w>0
+    for (siz i = 0; i < n; i++) {
+        if (R[i]->m == 0) {
+            rleInit(M, h, w, 1);
+            M->cnts[0] = h * w;
+            return;
+        }
+    }
+
     RLE tmp;
     siz m_max = sizMin(h * w + 1, m_total);
     rleInit(&tmp, h, w, m_max);
@@ -382,6 +406,15 @@ void rleMerge(const RLE *R, RLE *M, siz n, uint boolfunc) {
         m_total += R[i].m;
     }
 
+    // Guard against malformed inputs with m==0 but h*w>0
+    for (siz i = 0; i < n; i++) {
+        if (R[i].m == 0) {
+            rleInit(M, h, w, 1);
+            M->cnts[0] = h * w;
+            return;
+        }
+    }
+
     RLE tmp;
     siz m_max = sizMin(h * w + 1, m_total);
     rleInit(&tmp, h, w, m_max);
@@ -452,6 +485,11 @@ void rleMerge(const RLE *R, RLE *M, siz n, uint boolfunc) {
 static void _rleMergeCustom(
     const RLE **R, RLE *M, siz n, bool(*custom_func)(uint32_t, siz, void*), void* custom_data) {
 
+    if (n > 32) {
+        fprintf(stderr, "rlemasklib: _rleMergeCustom: n=%zu exceeds max of 32 (uint32 bitmask)\n", n);
+        abort();
+    }
+
     if (n == 0) {
         rleInit(M, 0, 0, 0);
         return;
@@ -474,6 +512,15 @@ static void _rleMergeCustom(
         m_total += R[i]->m;
     }
     rleInit(M, h, w, sizMin(h * w + 1, m_total));
+
+    // Guard against malformed inputs with m==0 but h*w>0
+    for (siz i = 0; i < n; i++) {
+        if (R[i]->m == 0) {
+            rleRealloc(M, 1);
+            M->cnts[0] = h * w;
+            return;
+        }
+    }
 
     uint32_t vs = 0;  // bitset of the current value of each run, first in the lowest bit
 
@@ -550,6 +597,14 @@ void rleMergeWeightedAtLeast2(
     }
     rleInit(M, h, w, sizMin(h * w + 1, m_total));
 
+    // Guard against malformed inputs with m==0 but h*w>0
+    for (siz i = 0; i < n; i++) {
+        if (R[i]->m == 0) {
+            rleRealloc(M, 1);
+            M->cnts[0] = h * w;
+            return;
+        }
+    }
 
     struct uintIterator *iters = safe_malloc(n * sizeof(struct uintIterator)); // the pointer to the next run of each RLE
     for (siz i = 0; i < n; i++) {
@@ -634,6 +689,15 @@ void rleMergeAtLeast2(const RLE **R, RLE *M, siz n, uint k) {
         m_total += R[i]->m;
     }
     rleInit(M, h, w, sizMin(h * w + 1, m_total));
+
+    // Guard against malformed inputs with m==0 but h*w>0
+    for (siz i = 0; i < n; i++) {
+        if (R[i]->m == 0) {
+            rleRealloc(M, 1);
+            M->cnts[0] = h * w;
+            return;
+        }
+    }
 
     uint count = 0;
 
