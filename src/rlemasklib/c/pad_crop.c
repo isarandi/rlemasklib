@@ -60,7 +60,7 @@ void rleCrop(const RLE *R, RLE *M, siz n, const uint *bbox) {
             siz j_last = 0;
             uint cnt_last = 0;
             r = h * w;
-            for (siz j = m - 1; true; j--) {
+            for (siz j = m; j-- > 0; ) {
                 r -= cnts_in[j];
                 if (r < box_end) {
                     j_last = j;
@@ -171,7 +171,7 @@ void rleCropInplace(RLE *R, siz n, const uint *bbox) {
             siz j_last = 0;
             uint cnt_last = 0;
             r = h * w;
-            for (siz j = m - 1; true; j--) {
+            for (siz j = m; j-- > 0; ) {
                 r -= cnts[j];
                 if (r < box_end) {
                     j_last = j;
@@ -352,7 +352,11 @@ void rleZeroPad(const RLE *R, RLE *M, siz n, const uint *pad_amounts) {
         } else {
             // original ends with 0s run, so we extend it
             // it was already extended by pad_vertical in the for loop above
-            cnts[m_out - 1] += end_px_addition - pad_vertical;
+            // Undo the extra pad_vertical added by the loop for the last column boundary,
+            // then add the actual end padding (right columns + bottom rows).
+            // Subtract first: cnts[m_out-1] >= pad_vertical (last bg run always crosses >= 1 column).
+            cnts[m_out - 1] -= pad_vertical;
+            cnts[m_out - 1] += end_px_addition;
         }
 
     }
@@ -494,7 +498,8 @@ void rleZeroPadInplace(RLE *R, siz n, const uint *pad_amounts) {
         } else {
             // original ends with 0s run, so we extend it
             // it was already extended by pad_vertical in the for loop above
-            cnts[m_out - 1] += end_px_addition - pad_vertical;
+            cnts[m_out - 1] -= pad_vertical;
+            cnts[m_out - 1] += end_px_addition;
         }
 
         if (tmp != NULL) {
@@ -549,9 +554,9 @@ void rlePadReplicate(const RLE *R, RLE *M, const uint *pad_amounts) {
     // check if the entire first col has same color
 
     uint j_toplef = (cnts[0] == 0) ? 1 : 0;
-    uint j_botlef;  // the run that has the bottomleft pixel
-    uint cnt_botlef; // the number of bottomleft pixels in the run
-    uint r_end_botlef; // the end of the run that has the bottomleft pixel
+    uint j_botlef = 0;  // the run that has the bottomleft pixel
+    uint cnt_botlef = 0; // the number of bottomleft pixels in the run
+    uint r_end_botlef = 0; // the end of the run that has the bottomleft pixel
     siz r = 0;
     for (siz j = 0; j < m; j++) {
         uint r_prev = r;
@@ -565,8 +570,8 @@ void rlePadReplicate(const RLE *R, RLE *M, const uint *pad_amounts) {
     }
 
 
-    uint j_toprig; // the run that has the topright pixel
-    uint cnt_toprig; // the number of topright pixels in the run
+    uint j_toprig = 0; // the run that has the topright pixel
+    uint cnt_toprig = 0; // the number of topright pixels in the run
     r = 0;
     for (siz j = m; j-- > 0; ) {
         uint r_prev = r;
@@ -592,17 +597,17 @@ void rlePadReplicate(const RLE *R, RLE *M, const uint *pad_amounts) {
     uint cnt_botrig = (j_botrig == j_toprig) ? cnt_toprig : cnts[j_botrig];
 
     // Compute how many runs we will have in the output
-    int total_out = v_toplef ? 1 : 0;
+    siz total_out = v_toplef ? 1 : 0;
     if (left_col_same) {
         total_out += 1;
     } else {
-        total_out += (plef + 1) * (j_botlef - j_toplef)
+        total_out += (siz)(plef + 1) * (j_botlef - j_toplef)
                    + (v_toplef != v_botlef ? plef : 0)
                    + 1;
     }
     total_out += (j_toprig > j_botlef + 1) ? (j_toprig - (j_botlef + 1)) : 0;
     if (!right_col_same) {
-        total_out += (prig + (w > 1 ? 1 : 0)) * (j_botrig - j_toprig)
+        total_out += (siz)(prig + (w > 1 ? 1 : 0)) * (j_botrig - j_toprig)
                    + (v_botrig != v_toprig ? prig : 0)
                    + ((j_botlef != j_toprig && w > 1) ? 1 : 0);
     } else if (j_botlef != j_toprig) {
@@ -700,6 +705,11 @@ void rlePadReplicate(const RLE *R, RLE *M, const uint *pad_amounts) {
         }
     }
 
+    if (m_out > total_out) {
+        fprintf(stderr, "rlemasklib: rlePadReplicate: m_out=%zu > total_out=%zu\n", m_out, total_out);
+        abort();
+    }
+    rleRealloc(M, m_out);
 }
 
 
