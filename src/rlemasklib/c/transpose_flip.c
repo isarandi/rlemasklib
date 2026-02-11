@@ -76,13 +76,13 @@ void rleRoll(const RLE *R, RLE *M) {
     uint w = R->w;
     siz m = R->m;
     uint *cnts_out = rleInit(M, h, w, m + 2);
-    siz j_first;
+    siz j_first = 0;
     siz m_out;
-    siz r_first;
+    siz r_first = 0;
     uint *cnts_in = R->cnts;
     {
         uint box_start = h * (w - 1);
-        uint cnt_first;
+        uint cnt_first = 0;
         siz r = h * w;
         for (int64_t j = m - 1; j >= 0; j--) {
             uint r_end = r;
@@ -187,7 +187,28 @@ void rleVerticalFlip(const RLE* R, RLE* M) {
     siz w = R->w;
     uint *cnts = R->cnts;
 
-    siz m_out = uintMin(m * 5, m + w * 2);
+    // Upper bound on output runs: 3*m + 1.
+    //
+    // The algorithm processes the input column by column from bottom to top, reversing runs within
+    // each column. When input runs span a column boundary, they get split. The key question is:
+    // how many output runs can be produced?
+    //
+    // Let K_total be the total number of run-fragments across all columns (after splitting), and
+    // S be the number of splits. Then K_total = m + S, since each split adds one fragment.
+    //
+    // Each input run can be split at most twice: once if it doesn't start at a column boundary
+    // (contributing a partial fragment at the start), and once at y=0 when it wraps to the next
+    // column. So S <= 2*m.
+    //
+    // Each column's reversed fragments are appended to the output. Two adjacent fragments can merge
+    // (when they have the same parity), but this only reduces the count. In the worst case, no
+    // merging occurs, and the output gets one extra run per column (for parity alignment), but this
+    // is bounded by the fragments themselves.
+    //
+    // Therefore: j_out <= K_total + 1 = m + S + 1 <= m + 2*m + 1 = 3*m + 1.
+    //
+    // Note: 3*m does NOT suffice (off by 1). 4*m or 5*m are also valid but wasteful.
+    siz m_out = 3 * m + 1;
     uint *cnts_out = rleInit(M, R->h, R->w, m_out);
 
     siz j_out = 0;
