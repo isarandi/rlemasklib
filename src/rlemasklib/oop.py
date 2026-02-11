@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import itertools
 import os
+import warnings
 from collections.abc import Iterable
 from typing import Union, Sequence, Optional, Callable
 
 import numpy as np
 from .boolfunc import BoolFunc
 from .oop_cython import RLECy
+
+_UNSET = object()
 
 
 class RLEMask:
@@ -129,6 +132,9 @@ class RLEMask:
             thresh128: deprecated, equivalent to threshold=128.
         """
         if thresh128:
+            warnings.warn(
+                "The 'thresh128' parameter is deprecated, use 'threshold=128' instead.",
+                DeprecationWarning, stacklevel=2)
             threshold = 128
         result = RLEMask._init()
         result.cy._i_from_array(mask_array, threshold, is_sparse)
@@ -3063,52 +3069,145 @@ class RLEMask:
         """
         return self.cy.to_dict(zlevel)
 
-    def to_array(self, value: int = 1, order="F") -> np.ndarray:
-        """Convert the RLE mask to a dense 2D uint8 numpy array.
+    def to_array(
+            self, fg_value=1, bg_value=0, dtype=np.uint8, order="F", *, value=_UNSET
+    ) -> np.ndarray:
+        """Convert the RLE mask to a dense numpy array.
 
-        False (background) values become 0 and True (foreground) values become the specified value.
+        Background pixels get ``bg_value`` and foreground pixels get ``fg_value``.
+
+        If either ``fg_value`` or ``bg_value`` is a tuple, list, or 1D array, the result is a
+        3D HWC array with one channel per element. A scalar value for the other parameter is
+        broadcast to all channels.
+
         The RLE is internally stored for the Fortran order, so order='F' is faster, because
         'C' requires a transpose. To improve efficiency, the transpose is done either in RLE or
         in dense form, depending on the sparseness of the mask.
 
         Args:
-            value: the "True" value to use in the resulting array
+            fg_value: the foreground value (scalar for 2D, tuple/list/array for HWC)
+            bg_value: the background value (scalar for 2D, tuple/list/array for HWC)
+            dtype: the numpy dtype of the resulting array (default: np.uint8)
             order: the order of the array ('C' for row-major, 'F' for column-major)
+            value: deprecated alias for ``fg_value``
 
         Returns:
-            An F or C-contiguous 2D numpy array of type uint8 representing the mask.
+            A 2D or 3D numpy array representing the mask.
 
         See Also:
             :meth:`__array__`, :meth:`from_array`
         """
-        return self.cy._r_to_dense_array(value, order)
+        if value is not _UNSET:
+            warnings.warn(
+                "The 'value' parameter is deprecated, use 'fg_value' instead.",
+                DeprecationWarning, stacklevel=2)
+            fg_value = value
 
-    def decode_into(self, arr: np.ndarray, value: int = 1) -> None:  # noqa: vulture
-        """Decode the RLE mask into an existing array, only setting foreground pixels.
+        fg_multi = isinstance(fg_value, (tuple, list)) or (isinstance(fg_value, np.ndarray) and fg_value.ndim == 1)
+        bg_multi = isinstance(bg_value, (tuple, list)) or (isinstance(bg_value, np.ndarray) and bg_value.ndim == 1)
 
-        This method sets foreground pixels to the specified value while leaving
-        background pixels unchanged. This is useful for overlaying multiple masks
-        onto a single array, e.g., creating a label map or visualization.
+        if not fg_multi and not bg_multi:
+            return self.cy._r_to_dense_array(fg_value, bg_value, order, np.dtype(dtype))
+
+        # Multi-valued: produce HWC array
+        if fg_multi:
+            fg_value = np.asarray(fg_value, dtype=dtype)
+            n_channels = len(fg_value)
+        if bg_multi:
+            bg_value = np.asarray(bg_value, dtype=dtype)
+            n_channels = len(bg_value)
+        if n_channels == 0:
+            raise ValueError("fg_value/bg_value must have at least one channel")
+        if fg_multi and bg_multi and len(fg_value) != len(bg_value):
+            raise ValueError(
+                f"fg_value length ({len(fg_value)}) != bg_value length ({len(bg_value)})")
+
+        # Broadcast scalar to all channels
+        dtype = np.dtype(dtype)
+        if not fg_multi:
+            fg_value = np.full(n_channels, fg_value, dtype=dtype)
+        if not bg_multi:
+            bg_value = np.full(n_channels, bg_value, dtype=dtype)
+
+        h, w = self.shape
+        arr = np.empty((h, w, n_channels), dtype=dtype, order='C')
+        arr[:] = bg_value  # broadcasts along last axis
+        if dtype == np.uint8:
+            self.cy._decode_into(arr, fg_value)
+        elif dtype == np.float32 or dtype == np.float64:
+            self.cy._decode_typed_multi_into(arr, np.asarray(fg_value, dtype=dtype))
+        else:
+            mask01 = self.cy._r_to_dense_array(1, 0, 'C')
+            arr[mask01 != 0] = fg_value
+
+        if order == 'F' and not arr.flags.f_contiguous:
+            arr = np.asfortranarray(arr)
+        return arr
+
+    def decode_into(  # noqa: vulture
+            self, arr: np.ndarray, fg_value=None, bg_value=None,
+            *, value=_UNSET) -> None:
+        """Decode the RLE mask into an existing array.
+
+        Writes ``fg_value`` to foreground pixels and/or ``bg_value`` to background pixels.
+        Pixels whose corresponding parameter is ``None`` are left unchanged.
+
+        Supports uint8, float32, and float64 arrays (2D or 3D HWC).
 
         Args:
-            arr: A 2D uint8 numpy array with shape matching the mask.
-                 Must be either C-contiguous or Fortran-contiguous.
-            value: The value to assign to foreground pixels (default: 1).
+            arr: A numpy array with shape matching the mask.
+                 Must be either C-contiguous or Fortran-contiguous (or strided for 2D uint8).
+            fg_value: The value to assign to foreground pixels (default: None, meaning unchanged).
+            bg_value: The value to assign to background pixels (default: None, meaning unchanged).
+            value: deprecated alias for ``fg_value``
 
         Raises:
             ValueError: If array shape doesn't match mask shape or array is not contiguous.
 
         Example:
             >>> canvas = np.zeros((100, 100), dtype=np.uint8)
-            >>> mask1.decode_into(canvas, value=1)
-            >>> mask2.decode_into(canvas, value=2)
-            >>> mask3.decode_into(canvas, value=3)
+            >>> mask1.decode_into(canvas, fg_value=1)
+            >>> mask2.decode_into(canvas, fg_value=2)
+            >>> mask3.decode_into(canvas, fg_value=3)
             # canvas now contains 1, 2, 3 for respective mask regions
 
         See Also:
             :meth:`to_array`
         """
-        self.cy._decode_into(arr, value)
+        if value is not _UNSET:
+            warnings.warn(
+                "The 'value' parameter is deprecated, use 'fg_value' instead.",
+                DeprecationWarning, stacklevel=2)
+            fg_value = value
+
+        if bg_value is not None and fg_value is not None:
+            arr[:] = bg_value
+            self._decode_into_typed(arr, fg_value)
+        elif fg_value is not None:
+            self._decode_into_typed(arr, fg_value)
+        elif bg_value is not None:
+            self.complement()._decode_into_typed(arr, bg_value)
+        # else: both None, no-op
+
+    def _decode_into_typed(self, arr, fg_value):
+        """Dispatch decode_into to the right Cython method based on array dtype."""
+        if arr.dtype == np.uint8:
+            self.cy._decode_into(arr, fg_value)
+        elif arr.dtype == np.float32 or arr.dtype == np.float64:
+            if arr.ndim == 2:
+                if isinstance(fg_value, (tuple, list, np.ndarray)):
+                    raise ValueError(
+                        "fg_value must be scalar for 2D arrays; use a 3D HWC array for multi-channel values")
+                self.cy._decode_typed_into(arr, fg_value)
+            else:
+                fg_arr = np.asarray(fg_value, dtype=arr.dtype)
+                if fg_arr.ndim == 0:
+                    fg_arr = np.full(arr.shape[2], fg_value, dtype=arr.dtype)
+                self.cy._decode_typed_multi_into(arr, fg_arr)
+        else:
+            order = 'F' if arr.flags.f_contiguous else 'C'
+            mask01 = self.cy._r_to_dense_array(1, 0, order)
+            arr[mask01 != 0] = fg_value
 
     def __reduce__(self):
         """Support for pickle serialization."""
@@ -3213,7 +3312,7 @@ def _forward_slice(slice_obj, length):
 #     cropped = x.crop(box_old, inplace=False)
 #     interp = cv2.INTER_LINEAR if fx > 1 and fy > 1 else cv2.INTER_AREA
 #     resized = cv2.resize(
-#         cropped.to_array(order='C', value=255),
+#         cropped.to_array(order='C', fg_value=255),
 #         (box_new[2], box_new[3]),
 #         fx=fx, fy=fy, interpolation=interp)
 #     resized = RLEMask.from_array(resized, thresh128=True, is_sparse=x.density < 0.04)

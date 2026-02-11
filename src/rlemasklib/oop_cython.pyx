@@ -1,6 +1,9 @@
 # cython: language_level=3
 # distutils: language = c
 
+cimport cython
+from cython cimport floating
+
 import zlib
 import numpy as np
 cimport numpy as np
@@ -206,6 +209,40 @@ ctypedef RLE**RLEPtrPtr
 ctypedef const RLE *ConstRLEPtr
 ctypedef const ConstRLEPtr *ConstRLEPtrConstPtr
 ctypedef const RLEPtr *ConstRLEPtrPtr
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+cdef bint _rle_counts_valid(RLE *r) noexcept nogil:
+    cdef siz total = 0
+    cdef siz i
+    for i in range(r.m):
+        total += r.cnts[i]
+    return total == r.h * r.w
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+cdef void _rle_decode_typed(RLE *r, floating[::1] out, floating fg_value) noexcept nogil:
+    cdef siz i, j, pos = 0
+    for i in range(r.m):
+        if i % 2 == 1:
+            for j in range(r.cnts[i]):
+                out[pos + j] = fg_value
+        pos += r.cnts[i]
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+cdef void _rle_decode_typed_multi(RLE *r, floating[::1] out, siz n_channels, floating[::1] fg_values) noexcept nogil:
+    cdef siz i, j, c, pos = 0
+    for i in range(r.m):
+        if i % 2 == 1:
+            for j in range(r.cnts[i]):
+                for c in range(n_channels):
+                    out[(pos + j) * n_channels + c] = fg_values[c]
+        pos += r.cnts[i]
+
 
 # python class to wrap RLE array in C
 # the class handles the memory allocation and deallocation
@@ -867,29 +904,110 @@ cdef class RLECy:
             else:
                 # Strided array (e.g., channel slice of HWC image)
                 # Use strided C function - strides are in bytes, arr.itemsize is 1 for uint8
+                if not _rle_counts_valid(&self.r):
+                    raise ValueError(
+                        "Invalid RLE: sum of runlengths does not match pixel count")
                 row_stride = arr.strides[0]
                 col_stride = arr.strides[1]
                 rleDecodeStrided(&self.r, <byte *> np.PyArray_DATA(arr), row_stride, col_stride,
                                  value)
 
-    def _r_to_dense_array(self, value, order) -> np.ndarray:
+    def _r_to_dense_array(self, fg_value, bg_value, order, dtype=np.uint8) -> np.ndarray:
+        cdef np.ndarray arr
+
+        dtype = np.dtype(dtype)
+        shape = (self.r.h, self.r.w)
         if self.r.h == 0 or self.r.w == 0:
-            return np.empty((self.r.h, self.r.w), dtype=np.uint8)
+            return np.full(shape, bg_value, dtype=dtype)
 
-        if order == 'F':
-            arr = np.zeros((self.r.h, self.r.w), dtype=np.uint8, order='F')
+        # For C-order with sparse masks, allocate C directly to skip full transpose
+        alloc_order = order if (order == 'F' or self.r.m < self.r.h * self.r.w * 0.04) else 'F'
+
+        if bg_value == 0:
+            arr = np.zeros(shape, dtype=dtype, order=alloc_order)
         else:
-            is_sparse = self.r.m < self.r.h * self.r.w * 0.04
-            if is_sparse:
-                arr = np.zeros((self.r.h, self.r.w), dtype=np.uint8, order='C')
-            else:
-                arr = np.zeros((self.r.h, self.r.w), dtype=np.uint8, order='F')
+            arr = np.full(shape, bg_value, dtype=dtype, order=alloc_order)
 
-        self._decode_into(arr, value)
+        if dtype == np.uint8:
+            self._decode_into(arr, fg_value)
+        elif dtype == np.float32 or dtype == np.float64:
+            self._decode_typed_into(arr, fg_value)
+        else:
+            mask01 = np.zeros(shape, dtype=np.uint8, order=alloc_order)
+            self._decode_into(mask01, 1)
+            arr[mask01 != 0] = fg_value
 
-        if order == 'C' and arr.flags.f_contiguous:
+        if order == 'C' and not arr.flags.c_contiguous:
             return np.ascontiguousarray(arr)
         return arr
+
+    def _decode_typed_into(self, np.ndarray arr, fg_value):
+        """Decode RLE into a typed 2D array (float32/float64) using fused types."""
+        cdef RLECy transp
+        cdef float[::1] flat_f32
+        cdef double[::1] flat_f64
+        cdef RLE *rle_ptr
+
+        if arr.shape[0] != self.r.h or arr.shape[1] != self.r.w:
+            raise ValueError(
+                f"Array shape ({arr.shape[0]}, {arr.shape[1]}) does not match RLE shape ({self.r.h}, {self.r.w})")
+
+        if arr.dtype != np.float32 and arr.dtype != np.float64:
+            raise ValueError(f"_decode_typed_into only supports float32 and float64, got {arr.dtype}")
+
+        if arr.flags.f_contiguous:
+            rle_ptr = &self.r
+        elif arr.flags.c_contiguous:
+            transp = self._r_transpose()
+            rle_ptr = &transp.r
+        else:
+            raise ValueError("Array must be C-contiguous or F-contiguous")
+
+        if not _rle_counts_valid(rle_ptr):
+            raise ValueError("Invalid RLE: sum of runlengths does not match pixel count")
+
+        order = 'F' if arr.flags.f_contiguous else 'C'
+        if arr.dtype == np.float32:
+            flat_f32 = arr.ravel(order=order)
+            _rle_decode_typed(rle_ptr, flat_f32, <float>fg_value)
+        else:
+            flat_f64 = arr.ravel(order=order)
+            _rle_decode_typed(rle_ptr, flat_f64, <double>fg_value)
+
+    def _decode_typed_multi_into(self, np.ndarray arr, np.ndarray fg_values):
+        """Decode RLE into a typed 3D HWC array (float32/float64) using fused types."""
+        cdef RLECy transp
+        cdef float[::1] flat_f32, fgv_f32
+        cdef double[::1] flat_f64, fgv_f64
+        cdef RLE *rle_ptr
+        cdef siz n_channels = arr.shape[2]
+
+        if arr.shape[0] != self.r.h or arr.shape[1] != self.r.w:
+            raise ValueError(
+                f"Array shape ({arr.shape[0]}, {arr.shape[1]}) does not match RLE shape ({self.r.h}, {self.r.w})")
+
+        if fg_values.shape[0] != n_channels:
+            raise ValueError(
+                f"fg_values length ({fg_values.shape[0]}) does not match "
+                f"number of channels ({n_channels})")
+
+        if not arr.flags.c_contiguous:
+            raise ValueError("3D array must be C-contiguous for typed multi-channel decode")
+
+        transp = self._r_transpose()
+        rle_ptr = &transp.r
+
+        if not _rle_counts_valid(rle_ptr):
+            raise ValueError("Invalid RLE: sum of runlengths does not match pixel count")
+
+        if arr.dtype == np.float32:
+            flat_f32 = arr.ravel(order='C')
+            fgv_f32 = np.ascontiguousarray(fg_values, dtype=np.float32)
+            _rle_decode_typed_multi(rle_ptr, flat_f32, n_channels, fgv_f32)
+        else:
+            flat_f64 = arr.ravel(order='C')
+            fgv_f64 = np.ascontiguousarray(fg_values, dtype=np.float64)
+            _rle_decode_typed_multi(rle_ptr, flat_f64, n_channels, fgv_f64)
 
     def _i_zeros(self, shape):
         rleZeros(&self.r, shape[0], shape[1])
