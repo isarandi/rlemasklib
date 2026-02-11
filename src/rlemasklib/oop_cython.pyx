@@ -20,6 +20,9 @@ np.import_array()
 cdef extern from "numpy/arrayobject.h":
     void PyArray_ENABLEFLAGS(np.ndarray arr, int flags)
     void PyArray_CLEARFLAGS(np.ndarray arr, int flags)
+    int PyArray_SetBaseObject(np.ndarray arr, object base)
+
+from cpython.ref cimport Py_INCREF
 
 cdef extern from "stdbool.h":
     ctypedef int bool
@@ -751,7 +754,11 @@ cdef class RLECy:
 
     @shape.setter
     def shape(self, new_shape: tuple[int, int]):
-        """Set the shape of the mask.
+        """Set the shape of the mask without modifying the run-length data.
+
+        This is a low-level power-user API. The caller is responsible for ensuring
+        that the run-length counts still sum to new_h * new_w. Setting an incompatible
+        shape will result in undefined behavior on subsequent operations.
 
         Args:
             new_shape: the new shape of the mask (height, width)
@@ -892,9 +899,18 @@ cdef class RLECy:
         return rleEqual(&self.r, &other.r) == 1
 
     cpdef np.ndarray _counts_view(self):
+        """Return a writable NumPy view of the internal run-length counts.
+
+        This is a low-level power-user API. The returned array directly aliases the
+        internal RLE buffer. Modifying it will change the mask in place -- the caller
+        is responsible for maintaining the invariant that counts sum to h*w.
+        """
         cdef np.npy_intp shape[1]
         shape[0] = self.r.m
-        return np.PyArray_SimpleNewFromData(1, shape, np.NPY_UINT32, self.r.cnts)
+        arr = np.PyArray_SimpleNewFromData(1, shape, np.NPY_UINT32, self.r.cnts)
+        Py_INCREF(self)
+        PyArray_SetBaseObject(arr, self)
+        return arr
 
     def area(self) -> int:
         cdef uint a
@@ -1138,6 +1154,8 @@ cdef class RLECy:
         cdef uint *coords
         cdef siz n
         rleNonZeroIndices(&self.r, &coords, &n)
+        if n == 0:
+            return np.empty((0, 2), dtype=np.uint32)
         cdef np.npy_intp shape[2]
         shape[0] = n // 2
         shape[1] = 2
@@ -1173,6 +1191,8 @@ cdef class RLECy:
 
     cpdef to_dict(self, zlevel: Optional[int] = None):
         cdef char *c_string = rleToString(&self.r)
+        if c_string == NULL:
+            raise MemoryError("rleToString allocation failed")
         try:
             if zlevel is not None:
                 compressed = zlib.compress(memoryview(c_string), zlevel)
@@ -1189,15 +1209,17 @@ cdef class RLECy:
 
     @staticmethod
     def iou_matrix(gt: Sequence[RLECy], dt: Sequence[RLECy]) -> np.ndarray:
+        if len(dt) == 0 or len(gt) == 0:
+            return np.zeros((len(gt), len(dt)), dtype=np.float64)
+
         cdef double[::1] o = np.empty(len(dt) * len(gt), dtype=np.float64)
         cdef RLE *dt_c = <RLE *> malloc(len(dt) * sizeof(RLE))
         cdef RLE *gt_c = <RLE *> malloc(len(gt) * sizeof(RLE))
         cdef RLECy rle
 
-        if len(dt) == 0 or len(gt) == 0:
-            return np.zeros((len(gt), len(dt)), dtype=np.float64)
-
         if not dt_c or not gt_c:
+            free(dt_c)
+            free(gt_c)
             raise MemoryError("Failed to allocate memory for RLE pointers")
 
         try:

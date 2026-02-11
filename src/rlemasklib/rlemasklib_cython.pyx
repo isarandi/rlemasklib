@@ -152,12 +152,11 @@ cdef class Masks:
         cdef np.npy_intp shape[1]
         shape[0] = <np.npy_intp> self._h * self._w * self._n
         # Create a 1D array, and reshape it to fortran/Matlab column-major array
-        ndarray = np.PyArray_SimpleNewFromData(1, shape, np.NPY_UINT8, self._mask).reshape(
-            (self._h, self._w, self._n), order='F')
-        # The _mask allocated by Masks is now handled by ndarray
-        PyArray_ENABLEFLAGS(ndarray, np.NPY_ARRAY_OWNDATA)
+        base = np.PyArray_SimpleNewFromData(1, shape, np.NPY_UINT8, self._mask)
+        # The _mask allocated by Masks is now handled by base
+        PyArray_ENABLEFLAGS(base, np.NPY_ARRAY_OWNDATA)
         self._owns_data = False
-        return ndarray
+        return base.reshape((self._h, self._w, self._n), order='F')
 
 # internal conversion from Python RLEs object to compressed RLE format
 def _to_leb128_dicts(RLEs Rs):
@@ -167,6 +166,8 @@ def _to_leb128_dicts(RLEs Rs):
     objs = []
     for i in range(n):
         c_string = rleToString(<RLE *> &Rs._R[i])
+        if c_string == NULL:
+            raise MemoryError("rleToString allocation failed")
         py_string = c_string
         objs.append({
             'size': [Rs._R[i].h, Rs._R[i].w],
@@ -261,6 +262,8 @@ def _from_uncompressed_dicts(rleObjs):
 
 def decodeUncompressed(ucRles):
     cdef RLEs Rs = _from_uncompressed_dicts(ucRles)
+    if Rs._n == 0:
+        return np.empty((0, 0, 0), dtype=np.uint8)
     h, w, n = Rs._R[0].h, Rs._R[0].w, Rs._n
     masks = Masks(h, w, n)
     cdef bool success = rleDecode(<RLE *> Rs._R, masks._mask, n, 1)
@@ -276,7 +279,7 @@ def merge(rleObjs, boolfunc=14):
 
 def area(rleObjs):
     cdef RLEs Rs = _from_leb128_dicts(rleObjs)
-    cdef uint *_a = <uint *> malloc(Rs._n * sizeof(uint))
+    cdef uint *_a = <uint *> malloc(Rs._n * sizeof(uint))  # TODO: NULL check
     rleArea(Rs._R, Rs._n, _a)
     cdef np.npy_intp shape[1]
     shape[0] = <np.npy_intp> Rs._n
@@ -325,7 +328,7 @@ def iou(dt, gt, pyiscrowd):
             return objs
         if type(objs) == np.ndarray:
             if len(objs.shape) == 1:
-                objs = objs.reshape((objs[0], 1))
+                objs = objs.reshape((1, -1))
             # check if it's Nx4 bbox
             if not len(objs.shape) == 2 or not objs.shape[1] == 4:
                 raise TypeError(
@@ -390,8 +393,7 @@ def iou(dt, gt, pyiscrowd):
         _iouFun = _bbIou
     else:
         raise TypeError('input data type not allowed.')
-    _iou = <double *> malloc(m * n * sizeof(double))
-    iou = np.zeros((m * n,), dtype=np.double)
+    _iou = <double *> malloc(m * n * sizeof(double))  # TODO: NULL check
     shape[0] = <np.npy_intp> m * n
     iou = np.PyArray_SimpleNewFromData(1, shape, np.NPY_DOUBLE, _iou)
     PyArray_ENABLEFLAGS(iou, np.NPY_ARRAY_OWNDATA)
@@ -401,13 +403,13 @@ def iou(dt, gt, pyiscrowd):
 def toBbox(rleObjs):
     cdef RLEs Rs = _from_leb128_dicts(rleObjs)
     cdef siz n = Rs.n
-    cdef BB _bb = <BB> malloc(4 * n * sizeof(double))
+    cdef BB _bb = <BB> malloc(4 * n * sizeof(double))  # TODO: NULL check
     rleToBbox(<const RLE *> Rs._R, _bb, n)
     cdef np.npy_intp shape[1]
     shape[0] = <np.npy_intp> 4 * n
-    bb = np.PyArray_SimpleNewFromData(1, shape, np.NPY_DOUBLE, _bb).reshape((n, 4))
-    PyArray_ENABLEFLAGS(bb, np.NPY_ARRAY_OWNDATA)
-    return bb
+    base = np.PyArray_SimpleNewFromData(1, shape, np.NPY_DOUBLE, _bb)
+    PyArray_ENABLEFLAGS(base, np.NPY_ARRAY_OWNDATA)
+    return base.reshape((n, 4))
 
 def frBbox(np.ndarray[np.double_t, ndim=2] bb, siz h, siz w):
     cdef siz n = bb.shape[0]
@@ -474,10 +476,10 @@ def removeSmallComponents(rleObj, min_size=1, connectivity=4):
 def centroid(rleObjs):
     cdef RLEs Rs = _from_leb128_dicts(rleObjs)
     cdef siz n = Rs.n
-    cdef double *_xys = <double *> malloc(2 * n * sizeof(double))
+    cdef double *_xys = <double *> malloc(2 * n * sizeof(double))  # TODO: NULL check
     rleCentroid(<const RLE *> Rs._R, _xys, n)
     cdef np.npy_intp shape[1]
     shape[0] = <np.npy_intp> 2 * n
-    xys = np.PyArray_SimpleNewFromData(1, shape, np.NPY_DOUBLE, _xys).reshape((n, 2))
-    PyArray_ENABLEFLAGS(xys, np.NPY_ARRAY_OWNDATA)
-    return xys
+    base = np.PyArray_SimpleNewFromData(1, shape, np.NPY_DOUBLE, _xys)
+    PyArray_ENABLEFLAGS(base, np.NPY_ARRAY_OWNDATA)
+    return base.reshape((n, 2))
