@@ -318,6 +318,8 @@ cdef class RLECy:
         rleSetInplace(&self.r, i, j, v)
 
     def _i_crop(self, start_h, start_w, span_h, span_w, step_h, step_w):
+        span_w = max(0, min(span_w, self.r.w - start_w))
+        span_h = max(0, min(span_h, self.r.h - start_h))
         cdef uint[4] box;
         box = [start_w, start_h, span_w, span_h]
         if box[3] != self.r.h or box[2] != self.r.w:

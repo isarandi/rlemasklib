@@ -52,7 +52,9 @@ class RLEMask:
             counts = np.ascontiguousarray(obj, dtype=np.uint32)
             if shape is None:
                 raise ValueError("shape must be provided when counts are given")
-            if np.sum(counts) != shape[0] * shape[1]:
+            # Note: uint32 sum can overflow for images >65535x65535.
+            # Consider raising for such gigantic masks in the future.
+            if np.sum(counts, dtype=np.uint64) != shape[0] * shape[1]:
                 raise ValueError(
                     "The sum of the counts must be equal to height * width."
                 )
@@ -90,7 +92,9 @@ class RLEMask:
             ValueError: if the order is not 'F' or 'C'.
         """
         counts = np.ascontiguousarray(counts, dtype=np.uint32)
-        if validate_sum and np.sum(counts) != shape[0] * shape[1]:
+        # Note: uint32 sum can overflow for images >65535x65535.
+        # Consider raising for such gigantic masks in the future.
+        if validate_sum and np.sum(counts, dtype=np.uint64) != shape[0] * shape[1]:
             raise ValueError("The sum of the counts must be equal to height * width.")
 
         if order not in ("F", "C"):
@@ -284,6 +288,7 @@ class RLEMask:
 
         result = RLEMask._init()
         imshape = _get_imshape(imshape, imsize)
+        poly = np.asarray(poly)
         result.cy._i_from_polygon(poly.reshape(-1), imshape)
         return result
 
@@ -377,6 +382,8 @@ class RLEMask:
         """The ratio of the number of runlengths vs number of pixels of the entire mask
         (not just the foreground)."""
         h, w = self.shape
+        if h == 0 or w == 0:
+            return 0.0
         m = self.counts_view.size
         return m / (h * w)
 
@@ -413,7 +420,8 @@ class RLEMask:
         """
         return (
             not np.any(self.counts_view[1:] == 0)
-            and np.sum(self.counts_view) == self.shape[0] * self.shape[1]
+            # Note: uint32 sum can overflow for images >65535x65535
+            and np.sum(self.counts_view, dtype=np.uint64) == self.shape[0] * self.shape[1]
         )
 
     def count_nonzero(self) -> int:
@@ -487,6 +495,10 @@ class RLEMask:
                     key = (h + key[0], key[1])
                 if key[1] < 0:
                     key = (key[0], w + key[1])
+                if not (0 <= key[0] < h and 0 <= key[1] < w):
+                    raise IndexError(
+                        f"Index ({key[0]}, {key[1]}) is out of bounds "
+                        f"for mask of shape ({h}, {w})")
                 return self.cy._get_int_index(key[0], key[1])
             else:
                 raise ValueError(
@@ -802,8 +814,7 @@ class RLEMask:
 
         if isinstance(other, RLEMask):
             return self.cy == other.cy
-        else:
-            return False
+        return NotImplemented
 
     def __repr__(self):
         """A string representation of the RLEMask, containing the shape and the runlengths."""
@@ -835,8 +846,11 @@ class RLEMask:
 
     def all(self) -> bool:
         """Check if all pixels in the mask are foreground."""
-        counts_view = self.counts_view
-        return len(counts_view) == 2 and counts_view[0] == 0
+        cv = self.counts_view
+        n = len(cv)
+        if n <= 1:
+            return n == 0 or cv[0] == 0
+        return n == 2 and cv[0] == 0
 
     def dilate_vertical(
         self, up: int = 0, down: int = 0, inplace: bool = False
@@ -1105,9 +1119,6 @@ class RLEMask:
                ........    ....
                ........    ....
         """
-        if self.shape[0] == 0 or self.shape[1] == 0:
-            return RLEMask.zeros(output_imshape)
-
         if output_imshape is None:
             if fx is None or fy is None:
                 raise ValueError("Either output_imshape or fx and fy must be provided")
@@ -1115,6 +1126,9 @@ class RLEMask:
                 int(round(self.shape[0] * fy)),
                 int(round(self.shape[1] * fx)),
             )
+
+        if self.shape[0] == 0 or self.shape[1] == 0:
+            return RLEMask.zeros(output_imshape)
 
         if fx is None:
             fx = output_imshape[1] / self.shape[1]
@@ -1397,7 +1411,7 @@ class RLEMask:
         elif kernel_shape == "square":
             heights = np.ones_like(x, dtype=np.uint32) * radius
         elif kernel_shape == "diamond":
-            heights = np.abs(x).astype(np.uint32)
+            heights = (radius - np.abs(x)).astype(np.uint32)
         elif kernel_shape == "cross":
             heights = np.zeros_like(x, dtype=np.uint32)
             heights[-1] = radius
@@ -1410,7 +1424,10 @@ class RLEMask:
         for j, d in enumerate(height_diffs, start=-radius):
             if d > 0:
                 vertical.cy._i_dilate_vertical(d, d)
-            to_merge += [vertical.shift((0, j)), vertical.shift((0, -j))]
+            if j == 0:
+                to_merge.append(vertical.shift((0, 0)))
+            else:
+                to_merge += [vertical.shift((0, j)), vertical.shift((0, -j))]
         merged = RLEMask.merge_many(to_merge, BoolFunc.OR)
         if inplace:
             self.cy = merged.cy
@@ -1991,6 +2008,11 @@ class RLEMask:
                 RLECy.merge_many_singlefunc([m.cy for m in masks], func.value)
             )
 
+        if len(func) != len(masks) - 1:
+            raise ValueError(
+                f"Expected {len(masks) - 1} functions for {len(masks)} masks, "
+                f"got {len(func)}")
+
         return RLEMask._init(
             RLECy.merge_many_multifunc([m.cy for m in masks], [f.value for f in func])
         )
@@ -2561,7 +2583,16 @@ class RLEMask:
             :meth:`tight_crop`
         """
         bbox_arr = np.asanyarray(bbox, dtype=np.int64)
-        x0, y0, bw, bh = np.maximum(bbox_arr, 0).astype(np.uint32)
+        x0, y0, bw, bh = bbox_arr.tolist()
+        if x0 < 0:
+            bw += x0
+            x0 = 0
+        if y0 < 0:
+            bh += y0
+            y0 = 0
+        bw = min(bw, self.shape[1] - x0)
+        bh = min(bh, self.shape[0] - y0)
+        x0, y0, bw, bh = np.uint32(x0), np.uint32(y0), np.uint32(max(0, bw)), np.uint32(max(0, bh))
         if inplace:
             self.cy._i_crop(y0, x0, bh, bw, 1, 1)
             return self
@@ -2867,7 +2898,7 @@ class RLEMask:
                 "Masks must have the same width to be concatenated vertically"
             )
 
-        return RLEMask._init(RLECy.concat_vertical([m.cy for m in masks]))
+        return RLEMask._init(RLECy.concat_vertical(cys))
 
     def tile(self, num_h: int, num_w: int) -> "RLEMask":
         """Tile the mask multiple times along the axes, analogous to :func:`np.tile <numpy.tile>`.
@@ -3123,10 +3154,16 @@ class RLEMask:
 
 
 def _get_imshape(imshape=None, imsize=None):
-    assert imshape is not None or imsize is not None
+    if imshape is None and imsize is None:
+        raise ValueError("Either imshape or imsize must be provided")
     if imshape is None:
         imshape = [imsize[1], imsize[0]]
-    return imshape[:2]
+    h, w = imshape[0], imshape[1]
+    if h * w > 0xFFFFFFFF:
+        raise ValueError(
+            f"Image dimensions {h}x{w} exceed maximum supported size "
+            f"(h*w must fit in uint32, got {h * w})")
+    return [h, w]
 
 
 def _forward_slice(slice_obj, length):
@@ -3137,8 +3174,9 @@ def _forward_slice(slice_obj, length):
         length: the length of the array
 
     Returns:
-        A tuple of (start, stop, step) for a forward slice and a boolean indicating if the slice
-            is reversed.
+        A tuple of (start, span, step, flip) where start is the starting index,
+            span is the length of the range, step is the stride, and flip is True
+            if the original slice was reversed.
     """
     r = range(length)[slice_obj]
     r_out = r[::-1] if r.step < 0 else r
