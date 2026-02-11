@@ -68,14 +68,14 @@ class TestDecodeInto2D:
     def test_c_contiguous(self, simple_mask):
         """Test with C-contiguous array."""
         arr = np.zeros((100, 100), dtype=np.uint8, order='C')
-        simple_mask.decode_into(arr, value=255)
+        simple_mask.decode_into(arr, fg_value=255)
         assert np.sum(arr == 255) == simple_mask.area()
         assert np.sum(arr == 0) == 100 * 100 - simple_mask.area()
 
     def test_f_contiguous(self, simple_mask):
         """Test with F-contiguous (Fortran order) array."""
         arr = np.zeros((100, 100), dtype=np.uint8, order='F')
-        simple_mask.decode_into(arr, value=255)
+        simple_mask.decode_into(arr, fg_value=255)
         assert np.sum(arr == 255) == simple_mask.area()
 
     def test_strided_from_hwc(self, simple_mask):
@@ -85,7 +85,7 @@ class TestDecodeInto2D:
         assert not channel.flags.c_contiguous
         assert not channel.flags.f_contiguous
 
-        simple_mask.decode_into(channel, value=128)
+        simple_mask.decode_into(channel, fg_value=128)
         assert np.sum(img[:, :, 0] == 128) == simple_mask.area()
         # Other channels should be unchanged
         assert np.sum(img[:, :, 1]) == 0
@@ -98,25 +98,25 @@ class TestDecodeInto2D:
         assert not strided.flags.c_contiguous
         assert not strided.flags.f_contiguous
 
-        simple_mask.decode_into(strided, value=200)
+        simple_mask.decode_into(strided, fg_value=200)
         assert np.sum(strided == 200) == simple_mask.area()
 
     def test_empty_mask(self, empty_mask):
         """Test with empty mask - array should remain unchanged."""
         arr = np.ones((100, 100), dtype=np.uint8) * 50
-        empty_mask.decode_into(arr, value=255)
+        empty_mask.decode_into(arr, fg_value=255)
         assert np.all(arr == 50)
 
     def test_full_mask(self, full_mask):
         """Test with full mask - all pixels should be set."""
         arr = np.zeros((100, 100), dtype=np.uint8)
-        full_mask.decode_into(arr, value=255)
+        full_mask.decode_into(arr, fg_value=255)
         assert np.all(arr == 255)
 
     def test_value_zero(self, simple_mask):
-        """Test with value=0 - should write zeros to foreground pixels."""
+        """Test with fg_value=0 - should write zeros to foreground pixels."""
         arr = np.ones((100, 100), dtype=np.uint8) * 100
-        simple_mask.decode_into(arr, value=0)
+        simple_mask.decode_into(arr, fg_value=0)
         # Foreground pixels should be 0, background should remain 100
         bool_mask = simple_mask.to_array().astype(bool)
         assert np.all(arr[bool_mask] == 0)
@@ -125,7 +125,7 @@ class TestDecodeInto2D:
     def test_nonzero_value_on_nonzero_array(self, simple_mask):
         """Test overwriting non-zero values."""
         arr = np.ones((100, 100), dtype=np.uint8) * 100
-        simple_mask.decode_into(arr, value=200)
+        simple_mask.decode_into(arr, fg_value=200)
         bool_mask = simple_mask.to_array().astype(bool)
         assert np.all(arr[bool_mask] == 200)
         assert np.all(arr[~bool_mask] == 100)
@@ -133,8 +133,8 @@ class TestDecodeInto2D:
     def test_overlay_multiple_masks(self, simple_mask, sparse_mask):
         """Test overlaying multiple masks."""
         arr = np.zeros((100, 100), dtype=np.uint8)
-        simple_mask.decode_into(arr, value=100)
-        sparse_mask.decode_into(arr, value=200)
+        simple_mask.decode_into(arr, fg_value=100)
+        sparse_mask.decode_into(arr, fg_value=200)
 
         # sparse_mask pixels should override simple_mask where they overlap
         sparse_bool = sparse_mask.to_array().astype(bool)
@@ -152,7 +152,7 @@ class TestDecodeInto3D:
     def test_broadcast_c_contiguous(self, simple_mask):
         """Test broadcast scalar to C-contiguous HWC array."""
         img = np.zeros((100, 100, 3), dtype=np.uint8, order='C')
-        simple_mask.decode_into(img, value=128)
+        simple_mask.decode_into(img, fg_value=128)
 
         for c in range(3):
             assert np.sum(img[:, :, c] == 128) == simple_mask.area()
@@ -160,7 +160,7 @@ class TestDecodeInto3D:
     def test_broadcast_f_contiguous(self, simple_mask):
         """Test broadcast scalar to F-contiguous HWC array."""
         img = np.zeros((100, 100, 3), dtype=np.uint8, order='F')
-        simple_mask.decode_into(img, value=128)
+        simple_mask.decode_into(img, fg_value=128)
 
         for c in range(3):
             assert np.sum(img[:, :, c] == 128) == simple_mask.area()
@@ -168,7 +168,7 @@ class TestDecodeInto3D:
     def test_rgb_values_c_contiguous(self, simple_mask):
         """Test per-channel RGB values with C-contiguous array."""
         img = np.zeros((100, 100, 3), dtype=np.uint8, order='C')
-        simple_mask.decode_into(img, value=(255, 128, 64))
+        simple_mask.decode_into(img, fg_value=(255, 128, 64))
 
         assert np.sum(img[:, :, 0] == 255) == simple_mask.area()
         assert np.sum(img[:, :, 1] == 128) == simple_mask.area()
@@ -177,7 +177,7 @@ class TestDecodeInto3D:
     def test_rgb_values_f_contiguous(self, simple_mask):
         """Test per-channel RGB values with F-contiguous array."""
         img = np.zeros((100, 100, 3), dtype=np.uint8, order='F')
-        simple_mask.decode_into(img, value=(255, 128, 64))
+        simple_mask.decode_into(img, fg_value=(255, 128, 64))
 
         assert np.sum(img[:, :, 0] == 255) == simple_mask.area()
         assert np.sum(img[:, :, 1] == 128) == simple_mask.area()
@@ -186,7 +186,7 @@ class TestDecodeInto3D:
     def test_rgba_4_channels(self, simple_mask):
         """Test 4-channel RGBA array."""
         img = np.zeros((100, 100, 4), dtype=np.uint8)
-        simple_mask.decode_into(img, value=(255, 128, 64, 200))
+        simple_mask.decode_into(img, fg_value=(255, 128, 64, 200))
 
         assert np.sum(img[:, :, 0] == 255) == simple_mask.area()
         assert np.sum(img[:, :, 1] == 128) == simple_mask.area()
@@ -196,7 +196,7 @@ class TestDecodeInto3D:
     def test_single_channel_3d(self, simple_mask):
         """Test single-channel 3D array (H, W, 1)."""
         img = np.zeros((100, 100, 1), dtype=np.uint8)
-        simple_mask.decode_into(img, value=(128,))
+        simple_mask.decode_into(img, fg_value=(128,))
         assert np.sum(img[:, :, 0] == 128) == simple_mask.area()
 
     def test_many_channels(self, simple_mask):
@@ -211,14 +211,14 @@ class TestDecodeInto3D:
     def test_list_values(self, simple_mask):
         """Test with list instead of tuple for values."""
         img = np.zeros((100, 100, 3), dtype=np.uint8)
-        simple_mask.decode_into(img, value=[255, 128, 64])
+        simple_mask.decode_into(img, fg_value=[255, 128, 64])
 
         assert np.sum(img[:, :, 0] == 255) == simple_mask.area()
 
     def test_numpy_array_values(self, simple_mask):
         """Test with numpy array for values."""
         img = np.zeros((100, 100, 3), dtype=np.uint8)
-        simple_mask.decode_into(img, value=np.array([255, 128, 64]))
+        simple_mask.decode_into(img, fg_value=np.array([255, 128, 64]))
 
         assert np.sum(img[:, :, 0] == 255) == simple_mask.area()
 
@@ -232,25 +232,25 @@ class TestDecodeIntoErrors:
         """Test error on shape mismatch for 2D array."""
         arr = np.zeros((50, 50), dtype=np.uint8)
         with pytest.raises(ValueError, match="shape"):
-            simple_mask.decode_into(arr, value=255)
+            simple_mask.decode_into(arr, fg_value=255)
 
     def test_shape_mismatch_3d(self, simple_mask):
         """Test error on shape mismatch for 3D array."""
         img = np.zeros((50, 50, 3), dtype=np.uint8)
         with pytest.raises(ValueError, match="shape"):
-            simple_mask.decode_into(img, value=255)
+            simple_mask.decode_into(img, fg_value=255)
 
     def test_wrong_value_length(self, simple_mask):
         """Test error when value length doesn't match channels."""
         img = np.zeros((100, 100, 3), dtype=np.uint8)
         with pytest.raises(ValueError, match="length"):
-            simple_mask.decode_into(img, value=(255, 128))  # Only 2 values for 3 channels
+            simple_mask.decode_into(img, fg_value=(255, 128))  # Only 2 values for 3 channels
 
     def test_wrong_ndim(self, simple_mask):
         """Test error for wrong number of dimensions."""
         arr = np.zeros((100,), dtype=np.uint8)
         with pytest.raises(ValueError, match="2D or 3D"):
-            simple_mask.decode_into(arr, value=255)
+            simple_mask.decode_into(arr, fg_value=255)
 
     def test_non_contiguous_3d_error(self, simple_mask):
         """Test error for non-contiguous 3D array."""
@@ -260,7 +260,7 @@ class TestDecodeIntoErrors:
         assert not strided.flags.f_contiguous
 
         with pytest.raises(ValueError, match="contiguous"):
-            simple_mask.decode_into(strided, value=255)
+            simple_mask.decode_into(strided, fg_value=255)
 
 
 # --- Hypothesis property-based tests ---
@@ -298,7 +298,7 @@ class TestDecodeIntoHypothesis:
 
         # Test array
         arr = np.zeros((h, w), dtype=np.uint8, order=order)
-        mask.decode_into(arr, value=value)
+        mask.decode_into(arr, fg_value=value)
 
         # Reference
         ref = np.zeros((h, w), dtype=np.uint8, order=order)
@@ -323,7 +323,7 @@ class TestDecodeIntoHypothesis:
         img = np.zeros((h, w, 3), dtype=np.uint8)
         channel = img[:, :, 1]  # Middle channel, strided
 
-        mask.decode_into(channel, value=value)
+        mask.decode_into(channel, fg_value=value)
 
         # Reference
         ref = np.zeros((h, w), dtype=np.uint8)
@@ -346,7 +346,7 @@ class TestDecodeIntoHypothesis:
         mask = RLEMask(mask_arr)
 
         img = np.zeros((h, w, 3), dtype=np.uint8, order=order)
-        mask.decode_into(img, value=value)
+        mask.decode_into(img, fg_value=value)
 
         ref = np.zeros((h, w, 3), dtype=np.uint8, order=order)
         reference_decode_into_3d_broadcast(mask, ref, value)
@@ -368,7 +368,7 @@ class TestDecodeIntoHypothesis:
         mask = RLEMask(mask_arr)
 
         img = np.zeros((h, w, 3), dtype=np.uint8, order=order)
-        mask.decode_into(img, value=values)
+        mask.decode_into(img, fg_value=values)
 
         ref = np.zeros((h, w, 3), dtype=np.uint8, order=order)
         reference_decode_into_3d_values(mask, ref, values)
@@ -389,7 +389,7 @@ class TestDecodeIntoHypothesis:
 
         values = (255, 128, 64, 200)
         img = np.zeros((h, w, 4), dtype=np.uint8)
-        mask.decode_into(img, value=values)
+        mask.decode_into(img, fg_value=values)
 
         ref = np.zeros((h, w, 4), dtype=np.uint8)
         reference_decode_into_3d_values(mask, ref, values)
@@ -406,21 +406,21 @@ class TestDecodeIntoEdgeCases:
         """Test with 1x1 mask."""
         mask = RLEMask(np.array([[1]], dtype=np.uint8))
         arr = np.zeros((1, 1), dtype=np.uint8)
-        mask.decode_into(arr, value=255)
+        mask.decode_into(arr, fg_value=255)
         assert arr[0, 0] == 255
 
     def test_1xn_mask(self):
         """Test with 1xN mask."""
         mask = RLEMask(np.array([[1, 0, 1, 1, 0]], dtype=np.uint8))
         arr = np.zeros((1, 5), dtype=np.uint8)
-        mask.decode_into(arr, value=100)
+        mask.decode_into(arr, fg_value=100)
         np.testing.assert_array_equal(arr, [[100, 0, 100, 100, 0]])
 
     def test_nx1_mask(self):
         """Test with Nx1 mask."""
         mask = RLEMask(np.array([[1], [0], [1]], dtype=np.uint8))
         arr = np.zeros((3, 1), dtype=np.uint8)
-        mask.decode_into(arr, value=100)
+        mask.decode_into(arr, fg_value=100)
         np.testing.assert_array_equal(arr, [[100], [0], [100]])
 
     def test_alternating_pixels(self):
@@ -432,7 +432,7 @@ class TestDecodeIntoEdgeCases:
         mask = RLEMask(mask_arr)
 
         arr = np.zeros((h, w), dtype=np.uint8)
-        mask.decode_into(arr, value=255)
+        mask.decode_into(arr, fg_value=255)
 
         np.testing.assert_array_equal(arr, mask_arr * 255)
 
@@ -446,7 +446,7 @@ class TestDecodeIntoEdgeCases:
         mask = RLEMask(mask_arr)
 
         arr = np.zeros((100, 100), dtype=np.uint8)
-        mask.decode_into(arr, value=255)
+        mask.decode_into(arr, fg_value=255)
 
         assert arr[0, 0] == 255
         assert arr[0, 99] == 255
@@ -461,7 +461,7 @@ class TestDecodeIntoEdgeCases:
         mask = RLEMask(mask_arr)
 
         arr = np.full((10, 10), 50, dtype=np.uint8)
-        mask.decode_into(arr, value=200)
+        mask.decode_into(arr, fg_value=200)
 
         bool_mask = mask_arr.astype(bool)
         assert np.all(arr[bool_mask] == 200)

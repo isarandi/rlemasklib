@@ -1,4 +1,6 @@
 import os
+import warnings
+
 import cv2
 import numpy as np
 from rlemasklib.oop import RLEMask
@@ -632,3 +634,303 @@ def test_decode_error():
         pass
     else:
         raise AssertionError("Expected ValueError")
+
+
+# --- to_array fg_value / bg_value / dtype tests ---
+
+def test_to_array_default():
+    mask = np.array([[0, 1], [1, 0]], dtype=np.uint8)
+    rle = RLEMask.from_array(mask)
+    result = rle.to_array()
+    np.testing.assert_array_equal(result, mask)
+    assert result.dtype == np.uint8
+
+
+def test_to_array_fg_value():
+    mask = np.array([[0, 1], [1, 0]], dtype=np.uint8)
+    rle = RLEMask.from_array(mask)
+    result = rle.to_array(fg_value=255)
+    expected = np.array([[0, 255], [255, 0]], dtype=np.uint8)
+    np.testing.assert_array_equal(result, expected)
+
+
+def test_to_array_bg_value():
+    mask = np.array([[0, 1], [1, 0]], dtype=np.uint8)
+    rle = RLEMask.from_array(mask)
+    result = rle.to_array(bg_value=128)
+    expected = np.array([[128, 1], [1, 128]], dtype=np.uint8)
+    np.testing.assert_array_equal(result, expected)
+
+
+def test_to_array_fg_and_bg():
+    mask = np.array([[0, 1], [1, 0]], dtype=np.uint8)
+    rle = RLEMask.from_array(mask)
+    result = rle.to_array(fg_value=5, bg_value=10)
+    expected = np.array([[10, 5], [5, 10]], dtype=np.uint8)
+    np.testing.assert_array_equal(result, expected)
+
+
+def test_to_array_dtype_float32():
+    mask = np.array([[0, 1], [1, 0]], dtype=np.uint8)
+    rle = RLEMask.from_array(mask)
+    result = rle.to_array(dtype=np.float32)
+    expected = np.array([[0.0, 1.0], [1.0, 0.0]], dtype=np.float32)
+    np.testing.assert_array_equal(result, expected)
+    assert result.dtype == np.float32
+
+
+def test_to_array_dtype_float32_with_nan_bg():
+    mask = np.array([[0, 1], [1, 0]], dtype=np.uint8)
+    rle = RLEMask.from_array(mask)
+    result = rle.to_array(bg_value=np.nan, dtype=np.float32)
+    assert result.dtype == np.float32
+    assert result[0, 1] == 1.0
+    assert result[1, 0] == 1.0
+    assert np.isnan(result[0, 0])
+    assert np.isnan(result[1, 1])
+
+
+def test_to_array_dtype_float64_custom_values():
+    mask = np.array([[0, 1], [1, 0]], dtype=np.uint8)
+    rle = RLEMask.from_array(mask)
+    result = rle.to_array(fg_value=2.5, bg_value=-1.0, dtype=np.float64)
+    expected = np.array([[-1.0, 2.5], [2.5, -1.0]], dtype=np.float64)
+    np.testing.assert_array_equal(result, expected)
+    assert result.dtype == np.float64
+
+
+def test_to_array_deprecated_value():
+    mask = np.array([[0, 1], [1, 0]], dtype=np.uint8)
+    rle = RLEMask.from_array(mask)
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        result = rle.to_array(value=255)
+        assert len(w) == 1
+        assert issubclass(w[0].category, DeprecationWarning)
+        assert "fg_value" in str(w[0].message)
+    expected = np.array([[0, 255], [255, 0]], dtype=np.uint8)
+    np.testing.assert_array_equal(result, expected)
+
+
+def test_to_array_order_c():
+    mask = np.array([[0, 1, 0], [1, 0, 1]], dtype=np.uint8)
+    rle = RLEMask.from_array(mask)
+    result = rle.to_array(fg_value=1, order='C')
+    np.testing.assert_array_equal(result, mask)
+    assert result.flags.c_contiguous
+
+
+def test_to_array_empty_mask():
+    rle = RLEMask.zeros((0, 5))
+    result = rle.to_array(fg_value=255, bg_value=128)
+    assert result.shape == (0, 5)
+
+    rle = RLEMask.zeros((5, 0))
+    result = rle.to_array(fg_value=255, bg_value=128)
+    assert result.shape == (5, 0)
+
+
+def test_to_array_full_mask():
+    rle = RLEMask.ones((3, 3))
+    result = rle.to_array(fg_value=7, bg_value=3)
+    expected = np.full((3, 3), 7, dtype=np.uint8)
+    np.testing.assert_array_equal(result, expected)
+
+
+def test_to_array_all_bg():
+    rle = RLEMask.zeros((3, 3))
+    result = rle.to_array(fg_value=7, bg_value=3)
+    expected = np.full((3, 3), 3, dtype=np.uint8)
+    np.testing.assert_array_equal(result, expected)
+
+
+# --- decode_into tests ---
+
+def test_decode_into_fg_only():
+    mask = np.array([[0, 1], [1, 0]], dtype=np.uint8)
+    rle = RLEMask.from_array(mask)
+    canvas = np.full((2, 2), 99, dtype=np.uint8)
+    rle.decode_into(canvas, fg_value=5)
+    # fg pixels become 5, bg pixels stay 99
+    expected = np.array([[99, 5], [5, 99]], dtype=np.uint8)
+    np.testing.assert_array_equal(canvas, expected)
+
+
+def test_decode_into_bg_only():
+    mask = np.array([[0, 1], [1, 0]], dtype=np.uint8)
+    rle = RLEMask.from_array(mask)
+    canvas = np.full((2, 2), 99, dtype=np.uint8)
+    rle.decode_into(canvas, bg_value=42)
+    # bg pixels become 42, fg pixels stay 99
+    expected = np.array([[42, 99], [99, 42]], dtype=np.uint8)
+    np.testing.assert_array_equal(canvas, expected)
+
+
+def test_decode_into_fg_and_bg():
+    mask = np.array([[0, 1], [1, 0]], dtype=np.uint8)
+    rle = RLEMask.from_array(mask)
+    canvas = np.full((2, 2), 99, dtype=np.uint8)
+    rle.decode_into(canvas, fg_value=5, bg_value=10)
+    expected = np.array([[10, 5], [5, 10]], dtype=np.uint8)
+    np.testing.assert_array_equal(canvas, expected)
+
+
+def test_decode_into_both_none():
+    mask = np.array([[0, 1], [1, 0]], dtype=np.uint8)
+    rle = RLEMask.from_array(mask)
+    canvas = np.full((2, 2), 99, dtype=np.uint8)
+    rle.decode_into(canvas, fg_value=None, bg_value=None)
+    # no-op, canvas unchanged
+    expected = np.full((2, 2), 99, dtype=np.uint8)
+    np.testing.assert_array_equal(canvas, expected)
+
+
+def test_decode_into_deprecated_value():
+    mask = np.array([[0, 1], [1, 0]], dtype=np.uint8)
+    rle = RLEMask.from_array(mask)
+    canvas = np.zeros((2, 2), dtype=np.uint8)
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        rle.decode_into(canvas, value=7)
+        assert len(w) == 1
+        assert issubclass(w[0].category, DeprecationWarning)
+    expected = np.array([[0, 7], [7, 0]], dtype=np.uint8)
+    np.testing.assert_array_equal(canvas, expected)
+
+
+def test_decode_into_empty_mask():
+    rle = RLEMask.zeros((3, 3))
+    canvas = np.full((3, 3), 99, dtype=np.uint8)
+    rle.decode_into(canvas, fg_value=5)
+    # all-zero mask, no foreground pixels, canvas unchanged
+    np.testing.assert_array_equal(canvas, np.full((3, 3), 99, dtype=np.uint8))
+
+
+def test_decode_into_full_mask():
+    rle = RLEMask.ones((3, 3))
+    canvas = np.full((3, 3), 99, dtype=np.uint8)
+    rle.decode_into(canvas, fg_value=5)
+    np.testing.assert_array_equal(canvas, np.full((3, 3), 5, dtype=np.uint8))
+
+
+# --- HWC (multi-channel) to_array tests ---
+
+def test_to_array_hwc_fg_tuple():
+    mask = np.array([[0, 1], [1, 0]], dtype=np.uint8)
+    rle = RLEMask.from_array(mask)
+    result = rle.to_array(fg_value=(255, 0, 0), bg_value=0)
+    assert result.shape == (2, 2, 3)
+    assert result.dtype == np.uint8
+    np.testing.assert_array_equal(result[0, 1], [255, 0, 0])  # fg pixel
+    np.testing.assert_array_equal(result[0, 0], [0, 0, 0])  # bg pixel
+
+
+def test_to_array_hwc_bg_tuple():
+    mask = np.array([[0, 1], [1, 0]], dtype=np.uint8)
+    rle = RLEMask.from_array(mask)
+    result = rle.to_array(fg_value=255, bg_value=(128, 64, 32))
+    assert result.shape == (2, 2, 3)
+    np.testing.assert_array_equal(result[0, 1], [255, 255, 255])  # fg broadcast
+    np.testing.assert_array_equal(result[0, 0], [128, 64, 32])  # bg pixel
+
+
+def test_to_array_hwc_both_tuples():
+    mask = np.array([[0, 1], [1, 0]], dtype=np.uint8)
+    rle = RLEMask.from_array(mask)
+    result = rle.to_array(fg_value=(255, 0, 0), bg_value=(0, 0, 255))
+    assert result.shape == (2, 2, 3)
+    np.testing.assert_array_equal(result[0, 1], [255, 0, 0])
+    np.testing.assert_array_equal(result[1, 1], [0, 0, 255])
+
+
+def test_to_array_hwc_numpy_array():
+    mask = np.array([[0, 1], [1, 0]], dtype=np.uint8)
+    rle = RLEMask.from_array(mask)
+    result = rle.to_array(fg_value=np.array([10, 20, 30, 40]), bg_value=0)
+    assert result.shape == (2, 2, 4)
+    np.testing.assert_array_equal(result[0, 1], [10, 20, 30, 40])
+    np.testing.assert_array_equal(result[0, 0], [0, 0, 0, 0])
+
+
+def test_to_array_hwc_list():
+    mask = np.array([[0, 1], [1, 0]], dtype=np.uint8)
+    rle = RLEMask.from_array(mask)
+    result = rle.to_array(fg_value=[200, 100], bg_value=[50, 25])
+    assert result.shape == (2, 2, 2)
+    np.testing.assert_array_equal(result[0, 1], [200, 100])
+    np.testing.assert_array_equal(result[0, 0], [50, 25])
+
+
+def test_to_array_hwc_full_mask():
+    rle = RLEMask.ones((3, 3))
+    result = rle.to_array(fg_value=(255, 128, 0), bg_value=(0, 0, 0))
+    expected_pixel = [255, 128, 0]
+    assert result.shape == (3, 3, 3)
+    for r in range(3):
+        for c in range(3):
+            np.testing.assert_array_equal(result[r, c], expected_pixel)
+
+
+def test_to_array_hwc_empty_mask():
+    rle = RLEMask.zeros((2, 2))
+    result = rle.to_array(fg_value=(255, 0, 0), bg_value=(0, 0, 255))
+    assert result.shape == (2, 2, 3)
+    for r in range(2):
+        for c in range(2):
+            np.testing.assert_array_equal(result[r, c], [0, 0, 255])
+
+
+def test_to_array_hwc_float32():
+    mask = np.array([[0, 1], [1, 0]], dtype=np.uint8)
+    rle = RLEMask.from_array(mask)
+    result = rle.to_array(fg_value=(1.0, 0.0, 0.0), bg_value=(0.0, 0.0, 1.0), dtype=np.float32)
+    assert result.shape == (2, 2, 3)
+    assert result.dtype == np.float32
+    np.testing.assert_array_equal(result[0, 1], [1.0, 0.0, 0.0])
+    np.testing.assert_array_equal(result[0, 0], [0.0, 0.0, 1.0])
+
+
+def test_to_array_hwc_float64_nan_bg():
+    mask = np.array([[0, 1], [1, 0]], dtype=np.uint8)
+    rle = RLEMask.from_array(mask)
+    result = rle.to_array(
+        fg_value=(1.0, 2.0, 3.0), bg_value=(np.nan, np.nan, np.nan), dtype=np.float64)
+    assert result.dtype == np.float64
+    np.testing.assert_array_equal(result[0, 1], [1.0, 2.0, 3.0])
+    assert all(np.isnan(result[0, 0]))
+
+
+# --- decode_into with float arrays ---
+
+def test_decode_into_float32_nan():
+    """Write NaN into invalid pixels of a float32 array."""
+    mask = np.array([[0, 1], [1, 0]], dtype=np.uint8)
+    rle = RLEMask.from_array(mask)
+    depth = np.ones((2, 2), dtype=np.float32) * 5.0
+    (~rle).decode_into(depth, fg_value=np.nan)
+    assert depth[0, 1] == 5.0  # valid pixel unchanged
+    assert depth[1, 0] == 5.0
+    assert np.isnan(depth[0, 0])  # invalid pixel set to NaN
+    assert np.isnan(depth[1, 1])
+
+
+def test_decode_into_float64():
+    mask = np.array([[0, 1], [1, 0]], dtype=np.uint8)
+    rle = RLEMask.from_array(mask)
+    arr = np.zeros((2, 2), dtype=np.float64)
+    rle.decode_into(arr, fg_value=3.14)
+    np.testing.assert_almost_equal(arr[0, 1], 3.14)
+    np.testing.assert_almost_equal(arr[1, 0], 3.14)
+    assert arr[0, 0] == 0.0
+    assert arr[1, 1] == 0.0
+
+
+def test_decode_into_float32_fg_and_bg():
+    mask = np.array([[0, 1], [1, 0]], dtype=np.uint8)
+    rle = RLEMask.from_array(mask)
+    arr = np.empty((2, 2), dtype=np.float32)
+    rle.decode_into(arr, fg_value=1.0, bg_value=np.nan)
+    assert arr[0, 1] == 1.0
+    assert arr[1, 0] == 1.0
+    assert np.isnan(arr[0, 0])
+    assert np.isnan(arr[1, 1])

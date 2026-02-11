@@ -1,5 +1,7 @@
 """Comprehensive tests for the RLEMask object-oriented API."""
 
+import warnings
+
 import numpy as np
 import pytest
 from rlemasklib.oop import RLEMask
@@ -72,7 +74,8 @@ class TestConstruction:
     def test_from_array_thresh128(self):
         """from_array with thresh128=True should threshold at 128."""
         mask = np.array([[100, 200], [50, 150]], dtype=np.uint8)
-        rle = RLEMask.from_array(mask, thresh128=True)
+        with pytest.warns(DeprecationWarning, match="thresh128"):
+            rle = RLEMask.from_array(mask, thresh128=True)
         expected = np.array([[0, 1], [0, 1]], dtype=np.uint8)
         np.testing.assert_array_equal(np.array(rle), expected)
 
@@ -1038,7 +1041,7 @@ class TestConversion:
     def test_to_array_value(self, eye3):
         """to_array with value should use that for foreground."""
         rle = RLEMask.from_array(eye3)
-        arr = rle.to_array(value=255)
+        arr = rle.to_array(fg_value=255)
         expected = eye3 * 255
         np.testing.assert_array_equal(arr, expected)
 

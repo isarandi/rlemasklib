@@ -46,7 +46,10 @@ class TestFromPng:
     def test_threshold(self):
         gray = skimage_data.camera()
         png_bytes = _grayscale_png_bytes(gray)
-        mask_from_array = RLEMask.from_array(gray, thresh128=True)
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            mask_from_array = RLEMask.from_array(gray, thresh128=True)
         mask_from_png = RLEMask.from_png(data=png_bytes, threshold=128)
         assert mask_from_png == mask_from_array
 
