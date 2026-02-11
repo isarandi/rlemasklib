@@ -538,6 +538,7 @@ static void prepareCameraChange(
 
 static void rotateCameraParams(
     const struct Camera *c1, struct Camera *c2, siz h, siz w, int k) {
+    *c2 = *c1;  // copy all fields first (initializes s, valid, etc.)
 
     double ox = (w - 1) / 2;
     double oy = (h - 1) / 2;
@@ -549,7 +550,6 @@ static void rotateCameraParams(
     k = int_remainder(k, 4);
     switch (k) {
         case 0:
-            memcpy(c2, c1, sizeof(struct Camera));
             return;
         case 1:
             c2->f[0] = fy;
@@ -620,17 +620,6 @@ static void rotateCameraParams(
         default:
             break;
     }
-
-
-    c2->R[6] = c1->R[6];
-    c2->R[7] = c1->R[7];
-    c2->R[8] = c1->R[8];
-    c2->d[0] = c1->d[0];
-    c2->d[1] = c1->d[1];
-    c2->d[4] = c1->d[4];
-    c2->d[5] = c1->d[5];
-    c2->d[6] = c1->d[6];
-    c2->d[7] = c1->d[7];
 }
 
 static void _matmul_A_BT_3x3(const double A[9], const double B[9], double C[9]) {

@@ -425,7 +425,9 @@ cdef class RLECy:
         return rect
 
     @staticmethod
-    cdef Camera _make_camera(R, K, d, polar_ud):
+    cdef Camera _make_camera(R, K, d,
+                              float[::1] ru, float[::1] tu,
+                              float[::1] rd, float[::1] td):
         cdef Camera cam = Camera()
         for i in range(9):
             cam.R[i] = R.flat[i]
@@ -437,26 +439,36 @@ cdef class RLECy:
         for i in range(12):
             cam.d[i] = d[i]
 
-        (ru, tu), (rd, td) = polar_ud
-        cdef float[::1] ru_ = np.ascontiguousarray(ru, dtype=np.float32)
-        cdef float[::1] tu_ = np.ascontiguousarray(tu, dtype=np.float32)
-        cam.valid.ru = &ru_[0]
-        cam.valid.tu = &tu_[0]
-        cam.valid.ru2_max = np.square(np.max(ru))
-        cam.valid.ru2_min = np.square(np.min(ru))
-        cdef float[::1] rd_ = np.ascontiguousarray(rd, dtype=np.float32)
-        cdef float[::1] td_ = np.ascontiguousarray(td, dtype=np.float32)
-        cam.valid.rd = &rd_[0]
-        cam.valid.td = &td_[0]
-        cam.valid.rd2_max = np.square(np.max(rd))
-        cam.valid.rd2_min = np.square(np.min(rd))
-        cam.valid.n = len(ru)
+        cam.valid.ru = &ru[0]
+        cam.valid.tu = &tu[0]
+        cam.valid.ru2_max = np.square(np.asarray(ru).max())
+        cam.valid.ru2_min = np.square(np.asarray(ru).min())
+        cam.valid.rd = &rd[0]
+        cam.valid.td = &td[0]
+        cam.valid.rd2_max = np.square(np.asarray(rd).max())
+        cam.valid.rd2_min = np.square(np.asarray(rd).min())
+        cam.valid.n = ru.shape[0]
         return cam
 
     def _r_warp_distorted(
             self, R1, R2, K1, K2, d1, d2, polar_ud1, polar_ud2, h_out, w_out):
-        cdef Camera old_cam = RLECy._make_camera(R1, K1, d1, polar_ud1)
-        cdef Camera new_cam = RLECy._make_camera(R2, K2, d2, polar_ud2)
+        # Allocate buffers here so they stay alive for the duration of rleWarpDistorted
+        (ru1, tu1), (rd1, td1) = polar_ud1
+        cdef float[::1] ru1_buf = np.ascontiguousarray(ru1, dtype=np.float32)
+        cdef float[::1] tu1_buf = np.ascontiguousarray(tu1, dtype=np.float32)
+        cdef float[::1] rd1_buf = np.ascontiguousarray(rd1, dtype=np.float32)
+        cdef float[::1] td1_buf = np.ascontiguousarray(td1, dtype=np.float32)
+        cdef Camera old_cam = RLECy._make_camera(
+            R1, K1, d1, ru1_buf, tu1_buf, rd1_buf, td1_buf)
+
+        (ru2, tu2), (rd2, td2) = polar_ud2
+        cdef float[::1] ru2_buf = np.ascontiguousarray(ru2, dtype=np.float32)
+        cdef float[::1] tu2_buf = np.ascontiguousarray(tu2, dtype=np.float32)
+        cdef float[::1] rd2_buf = np.ascontiguousarray(rd2, dtype=np.float32)
+        cdef float[::1] td2_buf = np.ascontiguousarray(td2, dtype=np.float32)
+        cdef Camera new_cam = RLECy._make_camera(
+            R2, K2, d2, ru2_buf, tu2_buf, rd2_buf, td2_buf)
+
         cdef RLECy result = RLECy()
         rleWarpDistorted(&self.r, &result.r, h_out, w_out, &old_cam, &new_cam)
         return result
