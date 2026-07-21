@@ -258,6 +258,7 @@ cdef class RLECy:
         rleFree(&self.r)
 
     def _i_from_counts(self, shape: Sequence[int], counts: np.ndarray, order: str):
+        _check_shape_domain(shape[0], shape[1])
         counts = np.ascontiguousarray(counts, dtype=np.uint32)
         cdef uint[::1] data = counts
         cdef RLE tmp
@@ -273,11 +274,20 @@ cdef class RLECy:
     def _i_from_array(self, mask: np.ndarray, int threshold=1, is_sparse: bool = True):
         cdef byte[::1, :] data
         arr = np.asanyarray(mask)
+        _check_shape_domain(arr.shape[0], arr.shape[1])
         if arr.size > 0:
             if arr.dtype == np.bool_:
                 arr = arr.view(np.uint8)
-            elif arr.dtype != np.uint8:
-                arr = np.asfortranarray(arr, dtype=np.uint8)
+            if arr.dtype == np.uint8:
+                if not 1 <= threshold <= 255:
+                    raise ValueError(
+                        f"threshold must be in [1, 255] for uint8 or bool input, "
+                        f"got {threshold}")
+            else:
+                # non-uint8 input is thresholded in its native dtype (foreground is
+                # value >= threshold); the resulting 0/1 array needs only the nonzero test
+                arr = np.asfortranarray(arr >= threshold, dtype=np.uint8)
+                threshold = 1
 
             if is_sparse and arr.flags.c_contiguous:
                 # It's typically cheaper to do the transpose already in RLE
@@ -295,10 +305,10 @@ cdef class RLECy:
         cdef uint[::1] data
         cdef siz h = d["size"][0]
         cdef siz w = d["size"][1]
-        if h * w > <siz>0xFFFFFFFF:
+        if h > 0xFFFFFFFF or w > 0xFFFFFFFF or h * w > <siz>0xFFFFFFFF:
             raise ValueError(
                 f"Image dimensions {h}x{w} exceed maximum supported size "
-                f"(h*w must fit in uint32, got {h * w})")
+                f"(h*w must fit in uint32)")
         if 'counts' in d:
             counts = d["counts"]
             if isinstance(counts, str):
@@ -307,8 +317,16 @@ cdef class RLECy:
                 raise ValueError(
                     "Invalid RLE string: sum of run lengths does not match h*w")
         elif 'ucounts' in d:
-            data = np.array(d["ucounts"], dtype=np.uint32)
-            rleFrCnts(&self.r, h, w, len(d["ucounts"]), &data[0])
+            ucounts = np.ascontiguousarray(d["ucounts"], dtype=np.uint32)
+            if ucounts.sum() != h * w:
+                raise ValueError(
+                    f'Invalid RLE: Sum of runlengths is {ucounts.sum()}, which does not match '
+                    f'the expected {h * w} based on the mask height {h} and width {w}')
+            data = ucounts
+            if len(data) > 0:
+                rleFrCnts(&self.r, h, w, len(data), &data[0])
+            else:
+                rleInit(&self.r, h, w, 0)
         elif 'zcounts' in d:
             counts = zlib.decompress(d["zcounts"])
             if not rleFrString(&self.r, <const char *> counts, h, w):
@@ -321,6 +339,10 @@ cdef class RLECy:
     def _i_from_bbox(self, bbox, imshape):
         cdef np.ndarray[np.double_t, ndim=1] bbox_double = np.ascontiguousarray(
             bbox, dtype=np.float64)
+        if bbox_double.shape[0] < 4:
+            raise ValueError(
+                f"Bounding box must have 4 elements (x, y, width, height), "
+                f"got {bbox_double.shape[0]}")
         rleFrBbox(&self.r, <double *> bbox_double.data, imshape[0], imshape[1], 1)
 
     def _i_from_polygon(self, poly, imshape):
@@ -331,6 +353,11 @@ cdef class RLECy:
     def _i_from_circle(self, center, radius, imshape):
         cdef np.ndarray[np.double_t, ndim=1] center_double = np.ascontiguousarray(
             center, dtype=np.float64)
+        if center_double.shape[0] < 2:
+            raise ValueError(
+                f"Circle center must have 2 elements (x, y), got {center_double.shape[0]}")
+        if not np.all(np.isfinite(center_double)) or not np.isfinite(radius):
+            raise ValueError("Circle center and radius must be finite")
         rleFrCircle(&self.r, <double *> center_double.data, radius, imshape[0], imshape[1])
 
     def _i_from_png_file(self, str path, int threshold=1, int channel=-1):
@@ -340,6 +367,8 @@ cdef class RLECy:
 
     def _i_from_png_bytes(self, data, int threshold=1, int channel=-1):
         cdef const byte[::1] data_view = data
+        if data_view.shape[0] == 0:
+            raise ValueError("Empty PNG data")
         if not rleFromPngBytes(&self.r, &data_view[0], len(data_view), threshold, channel):
             raise ValueError("Failed to decode PNG (must be 8-bit, supported types: grayscale, gray+alpha, RGB, RGBA)")
 
@@ -1056,9 +1085,11 @@ cdef class RLECy:
             _rle_decode_typed_multi(rle_ptr, flat_f64, n_channels, fgv_f64)
 
     def _i_zeros(self, shape):
+        _check_shape_domain(shape[0], shape[1])
         rleZeros(&self.r, shape[0], shape[1])
 
     def _i_ones(self, shape):
+        _check_shape_domain(shape[0], shape[1])
         rleOnes(&self.r, shape[0], shape[1])
 
     def __eq__(self, other: RLECy) -> bool:
@@ -1456,6 +1487,12 @@ cdef class RLECy:
         Label 0 is background, labels 1-255 become RLEs.
         Returns list of (label, RLECy) for non-empty labels.
         """
+        label_map = np.asanyarray(label_map)
+        if label_map.dtype != np.uint8 and label_map.size > 0:
+            if label_map.min() < 0 or label_map.max() > 255:
+                raise ValueError(
+                    f"Label map values must be in [0, 255], got range "
+                    f"[{label_map.min()}, {label_map.max()}]")
         cdef np.ndarray[np.uint8_t, ndim=2, mode='fortran'] lm = np.asfortranarray(
             label_map, dtype=np.uint8)
         cdef siz h = lm.shape[0]

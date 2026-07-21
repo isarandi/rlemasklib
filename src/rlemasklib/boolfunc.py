@@ -3,6 +3,9 @@ from enum import IntEnum
 
 _X = 0b1100
 _Y = 0b1010
+# Enum values are 4-bit truth tables. Expressions with Python's ~ must be masked back to
+# 4 bits so all members are non-negative (negative values do not fit the uint32 C interface).
+_ALL = 0b1111
 
 
 class BoolFunc(IntEnum):
@@ -45,7 +48,7 @@ class BoolFunc(IntEnum):
     INTERSECTION = AND = _X & _Y
     """Intersection (conjunction) of the two arguments."""
 
-    DIFFERENCE = _X & ~_Y
+    DIFFERENCE = _X & ~_Y & _ALL
     """Difference (subtraction) of the two arguments."""
 
     SYMMETRIC_DIFFERENCE = _X ^ _Y
@@ -54,17 +57,17 @@ class BoolFunc(IntEnum):
     XOR = _X ^ _Y
     """Symmetric difference (exclusive or) of the two arguments (same as :attr:`SYMMETRIC_DIFFERENCE`)."""
 
-    EQUIVALENCE = ~(_X ^ _Y)
+    EQUIVALENCE = ~(_X ^ _Y) & _ALL
     """Equivalence (biconditional) of the two arguments (same as :attr:`XNOR`)."""
 
-    XNOR = ~(_X ^ _Y)  # noqa: vulture
+    XNOR = ~(_X ^ _Y) & _ALL  # noqa: vulture
     """Equivalence (biconditional) of the two arguments (same as :attr:`EQUIVALENCE`)."""
 
-    IMPLICATION = ~_X | _Y
+    IMPLICATION = (~_X | _Y) & _ALL
     """Implication (conditional) of the two arguments."""
 
-    NOR = ~(_X | _Y)
+    NOR = ~(_X | _Y) & _ALL
     """NOR (neither) of the two arguments."""
 
-    NAND = ~(_X & _Y)
+    NAND = ~(_X & _Y) & _ALL
     """NAND (not both) of the two arguments."""

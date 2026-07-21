@@ -43,21 +43,24 @@ def encode(
     mask: np.ndarray,
     compressed: bool = True,
     zlevel: Optional[int] = None,
-    batch_first=False,
-) -> dict:
+    batch_first: bool = False,
+) -> dict | list[dict]:
     """Encode binary mask into a compressed RLE.
 
     Args:
         mask: a binary mask (numpy 2D array where zero is background and nonzero is foreground).
             For best performance, use uint8 or bool dtype. Other dtypes will be converted.
+            A 3D array is treated as a batch of masks (with the batch dimension last, or first
+            if ``batch_first`` is True) and yields a list of encoded RLEs.
         compressed: whether to compress the RLE using the LEB128-like algorithm from COCO (and
             potentially zlib afterwards).
         zlevel: zlib compression level. None means no zlib compression, numbers up to 9 are
             increasing zlib compression
             levels and -1 is the default level in zlib. It has no effect if compressed=False.
+        batch_first: whether the first dimension of a 3D input is the batch dimension.
 
     Returns:
-        An encoded RLE dictionary with a size key
+        An encoded RLE dictionary (or a list of them for 3D input) with a size key
             - ``"size"`` -- (height, width) of the mask,
         and one of the following
             - ``"ucounts"`` -- uncompressed run-length counts
@@ -65,6 +68,12 @@ def encode(
             - ``"zcounts"`` -- zlib-compressed LEB128-like compressed run-length counts
 
     """
+    if mask.ndim == 3:
+        imshape = mask.shape[1:3] if batch_first else mask.shape[:2]
+    else:
+        imshape = mask.shape[:2]
+    _check_domain(imshape[0], imshape[1])
+
     if mask.dtype == np.bool_:
         mask = mask.view(np.uint8)
     elif mask.dtype != np.uint8:
@@ -150,7 +159,7 @@ def decompress(encoded_mask: dict, only_gzip: bool = False) -> dict:
             size=encoded_mask['size'], counts=zlib.decompress(encoded_mask['zcounts'])
         )
     if only_gzip:
-        return encoded_mask
+        return dict(encoded_mask)
 
     return _decompress(encoded_mask)
 
@@ -312,8 +321,13 @@ def iou(masks):
     Returns:
         A scalar IoU value, expressing the ratio of the intersection area to the union area of
             the masks.
+
+    Raises:
+        ValueError: if masks is empty or the masks have different sizes
     """
-    return rlemasklib_cython.iouMulti(masks)
+    if len(masks) == 0:
+        raise ValueError("masks must be a non-empty list of RLE masks")
+    return float(rlemasklib_cython.iouMulti(masks))
 
 
 def to_bbox(rleObjs):
@@ -345,8 +359,14 @@ def crop(rleObjs, bbox: np.ndarray):
         Either a single RLE or a list of RLEs, depending on input type.
     """
     bbox = np.asanyarray(bbox, dtype=np.int64)
-    bbox = np.clip(bbox, 0, np.iinfo(np.uint32).max).astype(np.uint32)
+    bbox = np.clip(bbox, 0, np.iinfo(np.uint32).max).astype(np.uint32, order='C')
     if isinstance(rleObjs, (tuple, list)):
+        if bbox.ndim == 1:
+            bbox = np.tile(bbox, (len(rleObjs), 1))
+        elif bbox.shape[0] != len(rleObjs):
+            raise ValueError(
+                f'Expected a single bounding box or as many as there are masks '
+                f'({len(rleObjs)}), got {bbox.shape[0]}')
         return rlemasklib_cython.crop(rleObjs, bbox)
     else:
         rleObjs_out = rlemasklib_cython.crop([rleObjs], bbox[np.newaxis])
@@ -358,11 +378,19 @@ def pad(rleObjs, paddings, value: int = 0):
 
     Args:
         rleObjs: either a single RLE or a list of RLEs
-        paddings: left,right,top,bottom pixel amounts to pad
+        paddings: left,right,top,bottom pixel amounts to pad (non-negative)
+        value: the value to fill the padded area with, either 0 (background) or
+            1 (foreground)
 
     Returns:
         Either a single RLE or a list of RLEs, depending on input type.
+
+    Raises:
+        ValueError: if the paddings are negative or the padded size would exceed the supported
+            maximum of 2**32 - 1 pixels
     """
+    if value not in (0, 1):
+        raise ValueError(f"value must be 0 or 1, got {value}")
     if value == 0:
         return _pad(rleObjs, paddings)
     else:
@@ -380,8 +408,8 @@ def shift(rle: dict, offset: tuple[int, int], border_value: int = 0) -> dict:
     Returns:
         An RLE mask dictionary of the shifted mask.
     """
-    if offset == (0, 0):
-        return rle
+    if tuple(offset) == (0, 0):
+        return dict(rle)
     h, w = rle['size']
     dy, dx = offset
     # pad() takes [left, right, top, bottom]
@@ -475,16 +503,17 @@ def merge(masks, boolfunc: BoolFunc):
         An RLE mask dictionary of the merged masks.
 
     Raises:
-        ValueError: if masks have different sizes
+        ValueError: if masks is empty or the masks have different sizes
     """
-    if len(masks) > 1:
-        size0 = tuple(masks[0]['size'])
-        for i, m in enumerate(masks[1:], 1):
-            if tuple(m['size']) != size0:
-                raise ValueError(
-                    f"All masks must have the same size. "
-                    f"Mask 0 has size {size0}, mask {i} has size {tuple(m['size'])}"
-                )
+    if len(masks) == 0:
+        raise ValueError("masks must be a non-empty list of RLE masks")
+    size0 = tuple(masks[0]['size'])
+    for i, m in enumerate(masks[1:], 1):
+        if tuple(m['size']) != size0:
+            raise ValueError(
+                f"All masks must have the same size. "
+                f"Mask 0 has size {size0}, mask {i} has size {tuple(m['size'])}"
+            )
     return rlemasklib_cython.merge(masks, boolfunc)
 
 
@@ -745,11 +774,38 @@ def get_imshape(imshape=None, imsize=None):
         raise ValueError("Either imshape or imsize must be provided")
     if imshape is None:
         imshape = [imsize[1], imsize[0]]
-    return imshape[:2]
+    imshape = imshape[:2]
+    _check_domain(imshape[0], imshape[1])
+    return imshape
+
+
+def _check_domain(h, w):
+    if h < 0 or w < 0:
+        raise ValueError(f"Mask dimensions must be non-negative, got height {h} and width {w}")
+    if int(h) * int(w) > 0xFFFFFFFF:
+        raise ValueError(
+            f"Masks may have at most 2**32 - 1 pixels, got height {h} and width {w} "
+            f"({int(h) * int(w)} pixels)")
 
 
 def _pad(rleObjs, paddings):
-    paddings = np.asanyarray(paddings, dtype=np.uint32)
+    paddings = np.asanyarray(paddings)
+    if paddings.shape != (4,):
+        raise ValueError(f"Expected 4 padding amounts (left, right, top, bottom), "
+                         f"got shape {paddings.shape}")
+    if np.any(paddings < 0):
+        raise ValueError(f"Padding amounts must be non-negative, got {paddings.tolist()}")
+    left, right, top, bottom = (int(p) for p in paddings)
+    rles = rleObjs if isinstance(rleObjs, (tuple, list)) else [rleObjs]
+    for rle in rles:
+        h, w = rle['size']
+        h_out = int(h) + top + bottom
+        w_out = int(w) + left + right
+        if h_out > 0xFFFFFFFF or w_out > 0xFFFFFFFF or h_out * w_out > 0xFFFFFFFF:
+            raise ValueError(
+                f"Padded mask size ({h_out} x {w_out}) exceeds the supported maximum of "
+                f"2**32 - 1 pixels")
+    paddings = np.ascontiguousarray(paddings, dtype=np.uint32)
     if isinstance(rleObjs, (tuple, list)):
         return rlemasklib_cython.pad(rleObjs, paddings)
     else:

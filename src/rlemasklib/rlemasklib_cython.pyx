@@ -9,6 +9,8 @@
 
 # import both Python-level and C-level symbols of Numpy
 # the API uses Numpy to interface C and Python
+import zlib
+
 import numpy as np
 cimport numpy as np
 from libc.stdlib cimport malloc, free, calloc
@@ -194,19 +196,41 @@ def _to_uncompressed_dicts(RLEs Rs):
 def decompress(rleObjs):
     return _to_uncompressed_dicts(_from_leb128_dicts(rleObjs))
 
-# internal conversion from compressed RLE format to Python RLEs object
+# internal conversion from RLE dicts (counts, zcounts or ucounts) to Python RLEs object
 def _from_leb128_dicts(rleObjs):
     cdef siz n = len(rleObjs)
     Rs = RLEs(n)
     cdef bytes py_string
     cdef char *c_string
-    cdef uint sum_counts
+    cdef np.ndarray[np.uint32_t, ndim=1] ucounts
+    cdef siz h, w
     for i, obj in enumerate(rleObjs):
-        py_string = str.encode(obj['counts']) if type(obj['counts']) == str else obj['counts']
-        c_string = py_string
-        if not rleFrString(<RLE *> &Rs._R[i], <const  char *> c_string, obj['size'][0], obj['size'][1]):
+        h = obj['size'][0]
+        w = obj['size'][1]
+        if h > 0xFFFFFFFF or w > 0xFFFFFFFF or h * w > 0xFFFFFFFF:
             raise ValueError(
-                "Invalid RLE string: sum of run lengths does not match h*w")
+                f'Masks may have at most 2**32 - 1 pixels, got height {h} and width {w}')
+        if 'counts' in obj or 'zcounts' in obj:
+            if 'counts' in obj:
+                py_string = str.encode(obj['counts']) if type(obj['counts']) == str else obj['counts']
+            else:
+                py_string = zlib.decompress(obj['zcounts'])
+            c_string = py_string
+            if not rleFrString(<RLE *> &Rs._R[i], <const  char *> c_string, h, w):
+                raise ValueError(
+                    "Invalid RLE string: sum of run lengths does not match h*w")
+        elif 'ucounts' in obj:
+            ucounts = np.ascontiguousarray(obj['ucounts'], dtype=np.uint32)
+            if ucounts.sum() != h * w:
+                raise ValueError(
+                    f'Invalid RLE: Sum of runlengths is {ucounts.sum()}, which does not match the '
+                    f'expected {h * w} based on the mask height {h} and width {w}')
+            if len(ucounts) > 0:
+                rleFrCnts(&Rs._R[i], h, w, len(ucounts), <uint *> &ucounts[0])
+            else:
+                rleFrCnts(&Rs._R[i], h, w, 0, NULL)
+        else:
+            raise ValueError("RLE dict must contain 'counts', 'zcounts' or 'ucounts'")
 
     return Rs
 
@@ -242,6 +266,9 @@ def decode(rleObjs):
     if Rs._n == 0:
         return np.empty((0, 0, 0), dtype=np.uint8)
     h, w, n = Rs._R[0].h, Rs._R[0].w, Rs._n
+    for i in range(1, n):
+        if Rs._R[i].h != h or Rs._R[i].w != w:
+            raise ValueError('All RLEs must have the same size to be decoded together')
     masks = Masks(h, w, n)
     cdef bool success = rleDecode(<RLE *> Rs._R, masks._mask, n, 1)
     if not success:
@@ -256,6 +283,9 @@ def _from_uncompressed_dicts(rleObjs):
     for i, obj in enumerate(rleObjs):
         counts = np.ascontiguousarray(obj['ucounts'], dtype=np.uint32)
         h, w = obj['size'][0], obj['size'][1]
+        if h > 0xFFFFFFFF or w > 0xFFFFFFFF or h * w > 0xFFFFFFFF:
+            raise ValueError(
+                f'Masks may have at most 2**32 - 1 pixels, got height {h} and width {w}')
         if counts.sum() != h * w:
             raise ValueError(
                 f'Invalid RLE: Sum of runlengths is {counts.sum()}, which does not match the '
@@ -269,6 +299,9 @@ def decodeUncompressed(ucRles):
     if Rs._n == 0:
         return np.empty((0, 0, 0), dtype=np.uint8)
     h, w, n = Rs._R[0].h, Rs._R[0].w, Rs._n
+    for i in range(1, n):
+        if Rs._R[i].h != h or Rs._R[i].w != w:
+            raise ValueError('All RLEs must have the same size to be decoded together')
     masks = Masks(h, w, n)
     cdef bool success = rleDecode(<RLE *> Rs._R, masks._mask, n, 1)
     if not success:
@@ -277,6 +310,9 @@ def decodeUncompressed(ucRles):
 
 def merge(rleObjs, boolfunc=14):
     cdef RLEs Rs = _from_leb128_dicts(rleObjs)
+    for i in range(1, Rs._n):
+        if Rs._R[i].h != Rs._R[0].h or Rs._R[i].w != Rs._R[0].w:
+            raise ValueError('All RLEs must have the same size to be merged')
     cdef RLEs R = RLEs(1)
     rleMerge(<RLE *> Rs._R, <RLE *> R._R, <siz> Rs._n, boolfunc & 0xffff)
     return _to_leb128_dicts(R)[0]
@@ -295,10 +331,18 @@ def area(rleObjs):
 
 def crop(rleObjs, np.ndarray[np.uint32_t, ndim=2] bb):
     cdef RLEs Rs = _from_leb128_dicts(rleObjs)
+    if bb.shape[0] != <np.npy_intp> Rs._n or bb.shape[1] != 4:
+        raise ValueError(
+            f'Expected a bounding box array of shape ({Rs._n}, 4), got '
+            f'({bb.shape[0]}, {bb.shape[1]})')
+    bb = np.ascontiguousarray(bb)
     rleCropInplace(Rs._R, Rs._n, <const uint *> bb.data)
     return _to_leb128_dicts(Rs)
 
 def pad(rleObjs, np.ndarray[np.uint32_t, ndim=1] paddings):
+    if paddings.shape[0] != 4:
+        raise ValueError(f'Expected 4 padding amounts, got {paddings.shape[0]}')
+    paddings = np.ascontiguousarray(paddings)
     cdef RLEs Rs_in = _from_leb128_dicts(rleObjs)
     cdef RLEs Rs_out = RLEs(Rs_in._n)
     rleZeroPad(Rs_in._R, Rs_out._R, Rs_in._n, <const uint *> paddings.data)
@@ -311,6 +355,9 @@ def complement(rleObjs):
 
 def iouMulti(rleObjs):
     cdef RLEs Rs = _from_leb128_dicts(rleObjs)
+    for i in range(1, Rs._n):
+        if Rs._R[i].h != Rs._R[0].h or Rs._R[i].w != Rs._R[0].w:
+            raise ValueError('All RLEs must have the same size to compute their IoU')
     cdef RLEs Rs_merged = RLEs(1)  # intersection and union
 
     cdef uint intersection_area
@@ -388,6 +435,9 @@ def iou(dt, gt, pyiscrowd):
     if not type(dt) == type(gt):
         raise TypeError(
             'The dt and gt should have the same data type, either RLEs, list or np.ndarray')
+    if iscrowd.shape[0] != <np.npy_intp> n:
+        raise ValueError(
+            f'iscrowd must have the same length as gt ({n}), got {iscrowd.shape[0]}')
 
     # define local variables
     cdef double *_iou = <double *> 0
@@ -423,6 +473,9 @@ def toBbox(rleObjs):
 
 def frBbox(np.ndarray[np.double_t, ndim=2] bb, siz h, siz w):
     cdef siz n = bb.shape[0]
+    if bb.shape[1] != 4:
+        raise ValueError(f'Expected a bounding box array of shape (n, 4), got (n, {bb.shape[1]})')
+    bb = np.ascontiguousarray(bb)
     Rs = RLEs(n)
     rleFrBbox(<RLE *> Rs._R, <const BB> bb.data, h, w, n)
     objs = _to_leb128_dicts(Rs)
@@ -440,13 +493,25 @@ def frPoly(poly, siz h, siz w):
 
 def frUncompressedRLE(ucRles):
     cdef np.ndarray[np.uint32_t, ndim=1] cnts
+    cdef siz h, w
     n = len(ucRles)
     objs = []
     for i in range(n):
         Rs = RLEs(1)
         cnts = np.ascontiguousarray(ucRles[i]['ucounts'], dtype=np.uint32)
-        rleFrCnts(&Rs._R[0], ucRles[i]['size'][0], ucRles[i]['size'][1], len(cnts),
-                  <uint *> &cnts[0])
+        h = ucRles[i]['size'][0]
+        w = ucRles[i]['size'][1]
+        if cnts.sum() != h * w:
+            raise ValueError(
+                f'Invalid RLE: Sum of runlengths is {cnts.sum()}, which does not match the '
+                f'expected {h * w} based on the mask height {h} and width {w}')
+        if h > 0xFFFFFFFF or w > 0xFFFFFFFF or h * w > 0xFFFFFFFF:
+            raise ValueError(
+                f'Masks may have at most 2**32 - 1 pixels, got height {h} and width {w}')
+        if len(cnts) > 0:
+            rleFrCnts(&Rs._R[0], h, w, len(cnts), <uint *> &cnts[0])
+        else:
+            rleFrCnts(&Rs._R[0], h, w, 0, NULL)
         objs.append(_to_leb128_dicts(Rs)[0])
     return objs
 

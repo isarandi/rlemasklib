@@ -1,7 +1,7 @@
 """Library for manipulating masks stored in run-length-encoded format.
 
 This library is an extended version of the pycocotools library's RLE functions, originally developed by Piotr Dollár and
-Tsung-Yi Linfor the COCO dataset :footcite:`lin2014coco`.
+Tsung-Yi Lin for the COCO dataset :footcite:`lin2014coco`.
 
 There are two ways to use this library:
 
@@ -113,7 +113,10 @@ from ._functional import (
 # it doesn't know that `RLEMask` refers to `rlemasklib.RLEMask` rather than
 # `rlemasklib.oop.RLEMask`. The _module_original_ attribute preserves the true module
 # for use by docs/conf.py's `module_restored` context manager when resolving source links.
+# The hasattr guard keeps aliases (full is ones, empty is zeros) from re-reading the already
+# patched __module__ on their second pass, and makes the loop idempotent across re-imports.
 for x in __all__:
     obj = globals()[x]
-    obj._module_original_ = obj.__module__  # noqa: vulture
+    if not hasattr(obj, '_module_original_'):
+        obj._module_original_ = obj.__module__  # noqa: vulture
     obj.__module__ = __name__

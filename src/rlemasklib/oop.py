@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import itertools
+import operator
 import os
 import warnings
 from collections.abc import Iterable
@@ -45,13 +46,14 @@ class RLEMask:
 
     def __init__(self, obj, *, shape: Optional[Sequence[int]] = None):
         self.cy = RLECy()
+        if isinstance(obj, dict):
+            self.cy._i_from_dict(obj)
+            return
+        if isinstance(obj, Sequence):
+            obj = np.asarray(obj)
         if isinstance(obj, np.ndarray) and obj.ndim == 2:
             self.cy._i_from_array(obj)
-        elif isinstance(obj, dict):
-            self.cy._i_from_dict(obj)
-        elif (isinstance(obj, np.ndarray) and obj.ndim == 1) or isinstance(
-            obj, Sequence
-        ):
+        elif isinstance(obj, np.ndarray) and obj.ndim == 1:
             counts = np.ascontiguousarray(obj, dtype=np.uint32)
             if shape is None:
                 raise ValueError("shape must be provided when counts are given")
@@ -123,10 +125,12 @@ class RLEMask:
         array format.
 
         Args:
-            mask_array: a numpy array of numerical type where nonzero means foreground and zero
-                means background.
+            mask_array: a numpy array of numerical type. Values >= ``threshold`` (compared in
+                the array's own dtype) are foreground, others background.
             threshold: pixel value threshold for binarization. Values >= threshold become
-                foreground. Default is 1 (any nonzero). Common values: 1, 128.
+                foreground. Default is 1 (any nonzero value for unsigned input). For uint8 and
+                bool input the threshold must be in [1, 255]; an out-of-range threshold would
+                only produce a constant mask, so it is rejected as a likely caller bug.
             is_sparse: hint that it is more efficient to transpose the mask in RLE form, only
                 affects efficiency when the mask is C contiguous.
             thresh128: deprecated, equivalent to threshold=128.
@@ -379,6 +383,13 @@ class RLEMask:
 
         Modifications to the returned array will affect the mask.
 
+        Warning:
+            The view aliases the mask's internal buffer, so it is only valid as long as the
+            mask is not mutated. In-place operations (e.g. :meth:`pad`, :meth:`complement`,
+            item assignment) may reallocate or shift that buffer, after which the view is
+            stale or dangling. Re-request the view after any mutation, or use :attr:`counts`
+            for a safe copy.
+
         Returns:
             An array view of the run-length counts.
         """
@@ -497,16 +508,18 @@ class RLEMask:
 
                 return RLEMask._init(cropped_cy)
             # Indexing like rle[1, 2]
-            elif isinstance(key[0], int) and isinstance(key[1], int):
-                if key[0] < 0:
-                    key = (h + key[0], key[1])
-                if key[1] < 0:
-                    key = (key[0], w + key[1])
-                if not (0 <= key[0] < h and 0 <= key[1] < w):
+            elif isinstance(key[0], (int, np.integer)) and isinstance(key[1], (int, np.integer)):
+                i = operator.index(key[0])
+                j = operator.index(key[1])
+                if i < 0:
+                    i += h
+                if j < 0:
+                    j += w
+                if not (0 <= i < h and 0 <= j < w):
                     raise IndexError(
                         f"Index ({key[0]}, {key[1]}) is out of bounds "
                         f"for mask of shape ({h}, {w})")
-                return self.cy._get_int_index(key[0], key[1])
+                return self.cy._get_int_index(i, j)
             else:
                 raise ValueError(
                     "Either slices or integers are supported, not a combination."
@@ -516,7 +529,7 @@ class RLEMask:
 
     def __setitem__(
         self,
-        key: Union[tuple[slice], tuple[int]],
+        key: Union[tuple[slice, slice], tuple[int, int], slice],
         value: Union[int, "RLEMask", np.ndarray],
     ):
         """Set the value of a submask to either a constant or another RLE or dense mask.
@@ -559,6 +572,10 @@ class RLEMask:
                 boxmask_cy = RLECy()
                 boxmask_cy._i_from_bbox([start_w, start_h, span_w, span_h], (h, w))
                 if isinstance(value, RLEMask):
+                    if value.shape != (span_h, span_w):
+                        raise ValueError(
+                            f"Value mask shape {value.shape} does not match the target "
+                            f"region shape ({span_h}, {span_w})")
                     value_cy = value.cy
                     if flip_h and flip_w:
                         value_cy = value_cy._r_rotate_180()
@@ -582,16 +599,25 @@ class RLEMask:
                     self.cy = self.cy._r_boolfunc(boxmask_cy, BoolFunc.OR.value)
                 else:
                     raise ValueError("Value must be an RLE or 0 or 1")
-            elif isinstance(key[0], int) and isinstance(key[1], int):
-                if key[0] < 0:
-                    key = (h + key[0], key[1])
-                if key[1] < 0:
-                    key = (key[0], w + key[1])
-                if not isinstance(value, int):
+            elif isinstance(key[0], (int, np.integer)) and isinstance(key[1], (int, np.integer)):
+                i = operator.index(key[0])
+                j = operator.index(key[1])
+                if i < 0:
+                    i += h
+                if j < 0:
+                    j += w
+                if not (0 <= i < h and 0 <= j < w):
+                    raise IndexError(
+                        f"Index ({key[0]}, {key[1]}) is out of bounds "
+                        f"for mask of shape ({h}, {w})")
+                try:
+                    value = operator.index(value)
+                except TypeError:
                     raise ValueError(
-                        "Value must be an integer when indexing with integers"
-                    )
-                self.cy._i_set_int_index(key[0], key[1], value)
+                        "Value must be an integer when indexing with integers") from None
+                if value not in (0, 1):
+                    raise ValueError(f"Value must be 0 or 1, got {value}")
+                self.cy._i_set_int_index(i, j, value)
             else:
                 raise ValueError(
                     "Mixed integer and slice indexing is not supported. "
@@ -815,6 +841,10 @@ class RLEMask:
     def __eq__(self, other):
         """Check if two RLEMasks are equal (same runlengths and shape).
 
+        Note:
+            RLEMask is mutable and therefore deliberately not hashable (defining ``__eq__``
+            sets ``__hash__`` to None), so masks cannot be used as dict keys or set members.
+
         Returns:
             True if the masks are equal, False otherwise.
         """
@@ -922,6 +952,14 @@ class RLEMask:
                ....    ##..    ####    ##..
                ....    ##..    ....    ....
         """
+        if len(masks) == 0:
+            raise ValueError("At least one mask must be provided")
+        shape0 = masks[0].shape
+        for i, m in enumerate(masks[1:], 1):
+            if m.shape != shape0:
+                raise ValueError(
+                    f"All masks must have the same shape. Mask 0 has shape {shape0}, "
+                    f"mask {i} has shape {m.shape}")
         return RLEMask._init(RLECy.merge_many_atleast([m.cy for m in masks], threshold))
 
     def max_pool2x2(self, inplace=False) -> "RLEMask":
@@ -988,7 +1026,7 @@ class RLEMask:
         """Average-pool the mask by a factor of 2.
 
         Each 2x2 block in the input produces a single pixel in the output, which is 1
-        if more than half the pixels (>=2 of 4) in the block are 1.
+        if at least half the pixels (>=2 of 4) in the block are 1.
 
         Returns:
             A new RLEMask object representing the average-pooled mask.
@@ -1024,7 +1062,8 @@ class RLEMask:
         Args:
             kernel_size: the size of the pooling kernel as two integers
             stride: the stride of the pooling as two integers
-            threshold: the result is set to 1 if the pooled result is greater than this value
+            threshold: the result is set to 1 if at least this many pixels in the window are 1
+                (>= comparison)
 
         Returns:
             A new RLEMask object representing the pooled and thresholded mask.
@@ -1068,7 +1107,8 @@ class RLEMask:
         Args:
             kernel: the convolution kernel as a 2D numpy array
             stride: the stride of the convolution as two integers
-            threshold: the result is set to 1 if the convolution result is greater than this value
+            threshold: the result is set to 1 if the convolution result is at least this value
+                (>= comparison)
 
         Returns:
             A new RLEMask object representing the convolved and thresholded mask.
@@ -1302,8 +1342,21 @@ class RLEMask:
         See Also:
             :meth:`crop`, :meth:`shift`
         """
+        if min(top, bottom, left, right) < 0:
+            raise ValueError(
+                f"Padding amounts must be non-negative, got "
+                f"({top}, {bottom}, {left}, {right})")
+        h, w = self.shape
+        h_out = h + top + bottom
+        w_out = w + left + right
+        if h_out > 0xFFFFFFFF or w_out > 0xFFFFFFFF or h_out * w_out > 0xFFFFFFFF:
+            raise ValueError(
+                f"Padded mask size ({h_out} x {w_out}) exceeds the supported maximum of "
+                f"2**32 - 1 pixels")
 
         if border_type == "constant":
+            if value not in (0, 1):
+                raise ValueError(f"value must be 0 or 1, got {value}")
             if inplace:
                 self.cy._i_zeropad(left, right, top, bottom, value)
                 return self
@@ -1394,7 +1447,8 @@ class RLEMask:
         """Dilate a mask with a kernel of a given shape and size.
 
         Args:
-            kernel_shape: the shape of the kernel, either 'circle' or 'square'
+            kernel_shape: the shape of the kernel, one of 'circle', 'square', 'diamond' or
+                'cross'
             kernel_size: the size of the kernel
             inplace: whether to perform the operation in place or to return a new object
 
@@ -1459,7 +1513,8 @@ class RLEMask:
         """Erode a mask with a kernel of a given shape and size.
 
         Args:
-            kernel_shape: the shape of the kernel, either 'circle' or 'square'
+            kernel_shape: the shape of the kernel, one of 'circle', 'square', 'diamond' or
+                'cross'
             kernel_size: the size of the kernel
             inplace: whether to perform the operation in place or to return a new object
 
@@ -1910,7 +1965,7 @@ class RLEMask:
             :meth:`merge_many`, which allows merging with different binary Boolean functions.
         """
         self._raise_if_different_shape(other)
-        return RLEMask._init(self.cy._r_boolfunc(other.cy, func & 0xFFFF))
+        return RLEMask._init(self.cy._r_boolfunc(other.cy, int(func) & 0xF))
 
     @staticmethod
     def intersection(masks: Sequence["RLEMask"]) -> "RLEMask":
@@ -2024,9 +2079,11 @@ class RLEMask:
         if not all(m.shape == masks[0].shape for m in masks[1:]):
             raise ValueError("All masks must have the same shape.")
 
-        if isinstance(func, BoolFunc):
+        # plain ints are accepted too, since Boolean functions can be composed with
+        # ~, & and | from BoolFunc members, which yields ints
+        if isinstance(func, int):
             return RLEMask._init(
-                RLECy.merge_many_singlefunc([m.cy for m in masks], func.value)
+                RLECy.merge_many_singlefunc([m.cy for m in masks], int(func) & 0xF)
             )
 
         if len(func) != len(masks) - 1:
@@ -2035,7 +2092,8 @@ class RLEMask:
                 f"got {len(func)}")
 
         return RLEMask._init(
-            RLECy.merge_many_multifunc([m.cy for m in masks], [f.value for f in func])
+            RLECy.merge_many_multifunc(
+                [m.cy for m in masks], [int(f) & 0xF for f in func])
         )
 
     @staticmethod
@@ -2237,6 +2295,13 @@ class RLEMask:
         See Also:
             Not to be confused with :meth:`tile`
         """
+        if num_h < 0 or num_w < 0:
+            raise ValueError(f"Repeat counts must be non-negative, got ({num_h}, {num_w})")
+        h, w = self.shape
+        if h * num_h * w * num_w > 0xFFFFFFFF:
+            raise ValueError(
+                f"Repeated mask size ({h * num_h} x {w * num_w}) exceeds the supported "
+                f"maximum of 2**32 - 1 pixels")
         if inplace:
             self.cy._i_repeat(num_h, num_w)
             return self
@@ -3061,6 +3126,8 @@ class RLEMask:
     def _fill_mask(
         self, mask: "RLEMask", value: int, inplace: bool = False
     ) -> "RLEMask":
+        if value not in (0, 1):
+            raise ValueError(f"value must be 0 or 1, got {value}")
         if inplace:
             if value == 1:
                 return self.__ior__(mask)
@@ -3243,7 +3310,7 @@ class RLEMask:
         See Also:
             :meth:`iou_matrix` for computing the IoU between pairs of multiple masks.
         """
-
+        self._raise_if_different_shape(other)
         return self.cy.iou(other.cy)
 
     @staticmethod
@@ -3262,7 +3329,10 @@ class RLEMask:
         See Also:
             :meth:`iou` for computing the IoU between two masks.
         """
-
+        shapes = {m.shape for m in masks1} | {m.shape for m in masks2}
+        if len(shapes) > 1:
+            raise ValueError(
+                f"All masks must have the same shape, got shapes {sorted(shapes)}")
         return RLECy.iou_matrix([m.cy for m in masks1], [m.cy for m in masks2])
 
     def _raise_if_different_shape(self, other: "RLEMask"):
