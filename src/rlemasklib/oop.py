@@ -1277,8 +1277,9 @@ class RLEMask:
     ) -> "RLEMask":
         """[Experimental] Warp the mask according to changing lens-distorted camera parameters
 
-        This function supports OpenCV-like lens distortion parameters. API design and documentation
-        is subject to change.
+        This function supports OpenCV-like lens distortion parameters: 12 coefficients
+        (k1, k2, p1, p2, k3, k4, k5, k6, s1, s2, s3, s4) or 14 (additionally tau_x, tau_y of
+        the tilted-sensor model). API design and documentation is subject to change.
         """
         for name, K, R, d in (("first", K1, R1, d1), ("second", K2, R2, d2)):
             K = np.asarray(K)

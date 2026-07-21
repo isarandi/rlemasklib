@@ -193,6 +193,9 @@ cdef extern from "warp_distorted.h" nogil:
         double s
         double R[9]
         double d[12]
+        double tilt[9]
+        double tilt_inv[9]
+        bool has_tilt
         ValidRegion valid
 
     bool rleWarpDistorted(
@@ -204,6 +207,31 @@ ctypedef RLE**RLEPtrPtr
 ctypedef const RLE *ConstRLEPtr
 ctypedef const ConstRLEPtr *ConstRLEPtrConstPtr
 ctypedef const RLEPtr *ConstRLEPtrPtr
+
+
+def _pad_distortion_coeffs(d):
+    d = np.ascontiguousarray(d, dtype=np.float64)
+    if len(d) < 12:
+        d = np.concatenate([d, np.zeros(12 - len(d), dtype=np.float64)])
+    return d
+
+
+def _tilt_matrices(d):
+    # OpenCV-style sensor tilt homography of the 14-coefficient distortion model:
+    # matTilt = matProjZ @ RotY(tau_y) @ RotX(tau_x), applied to normalized coordinates
+    # after the 12-coefficient distortion
+    if len(d) > 12 and (d[12] != 0 or d[13] != 0):
+        cx, sx = np.cos(d[12]), np.sin(d[12])
+        cy, sy = np.cos(d[13]), np.sin(d[13])
+        tilt = np.array([
+            [cx, 0, 0],
+            [-sx * sy, cy, 0],
+            [sy, -cy * sx, cx * cy]], dtype=np.float64)
+        tilt_inv = np.linalg.inv(tilt)
+        return (np.ascontiguousarray(tilt.reshape(-1)),
+                np.ascontiguousarray(tilt_inv.reshape(-1)), True)
+    identity = np.ascontiguousarray(np.eye(3, dtype=np.float64).reshape(-1))
+    return identity, identity, False
 
 
 def _check_shape_domain(h, w):
@@ -511,6 +539,7 @@ cdef class RLECy:
 
     @staticmethod
     cdef Camera _make_camera(R, K, d,
+                              double[::1] tilt, double[::1] tilt_inv, bint has_tilt,
                               float[::1] ru, float[::1] tu,
                               float[::1] rd, float[::1] td):
         cdef Camera cam = Camera()
@@ -523,6 +552,10 @@ cdef class RLECy:
         cam.s = K[0, 1]
         for i in range(12):
             cam.d[i] = d[i]
+        for i in range(9):
+            cam.tilt[i] = tilt[i]
+            cam.tilt_inv[i] = tilt_inv[i]
+        cam.has_tilt = has_tilt
 
         cam.valid.ru = &ru[0]
         cam.valid.tu = &tu[0]
@@ -538,13 +571,23 @@ cdef class RLECy:
     def _r_warp_distorted(
             self, R1, R2, K1, K2, d1, d2, polar_ud1, polar_ud2, h_out, w_out):
         # Allocate buffers here so they stay alive for the duration of rleWarpDistorted
+        tilt1_arr, tilt1_inv_arr, has_tilt1 = _tilt_matrices(d1)
+        tilt2_arr, tilt2_inv_arr, has_tilt2 = _tilt_matrices(d2)
+        d1 = _pad_distortion_coeffs(d1)
+        d2 = _pad_distortion_coeffs(d2)
+        cdef double[::1] tilt1_buf = tilt1_arr
+        cdef double[::1] tilt1_inv_buf = tilt1_inv_arr
+        cdef double[::1] tilt2_buf = tilt2_arr
+        cdef double[::1] tilt2_inv_buf = tilt2_inv_arr
+
         (ru1, tu1), (rd1, td1) = polar_ud1
         cdef float[::1] ru1_buf = np.ascontiguousarray(ru1, dtype=np.float32)
         cdef float[::1] tu1_buf = np.ascontiguousarray(tu1, dtype=np.float32)
         cdef float[::1] rd1_buf = np.ascontiguousarray(rd1, dtype=np.float32)
         cdef float[::1] td1_buf = np.ascontiguousarray(td1, dtype=np.float32)
         cdef Camera old_cam = RLECy._make_camera(
-            R1, K1, d1, ru1_buf, tu1_buf, rd1_buf, td1_buf)
+            R1, K1, d1, tilt1_buf, tilt1_inv_buf, has_tilt1,
+            ru1_buf, tu1_buf, rd1_buf, td1_buf)
 
         (ru2, tu2), (rd2, td2) = polar_ud2
         cdef float[::1] ru2_buf = np.ascontiguousarray(ru2, dtype=np.float32)
@@ -552,7 +595,8 @@ cdef class RLECy:
         cdef float[::1] rd2_buf = np.ascontiguousarray(rd2, dtype=np.float32)
         cdef float[::1] td2_buf = np.ascontiguousarray(td2, dtype=np.float32)
         cdef Camera new_cam = RLECy._make_camera(
-            R2, K2, d2, ru2_buf, tu2_buf, rd2_buf, td2_buf)
+            R2, K2, d2, tilt2_buf, tilt2_inv_buf, has_tilt2,
+            ru2_buf, tu2_buf, rd2_buf, td2_buf)
 
         _check_shape_domain(h_out, w_out)
         cdef RLECy result = RLECy()
@@ -573,26 +617,6 @@ cdef class RLECy:
         cdef RLECy result = RLECy()
         rleMergeAtLeast2(rles, &result.r, 4, 2)
         return result
-
-    # @staticmethod
-    # def merge_many_multifunc(rles: Sequence[RLECy], boolfuncs: Sequence[int]):
-    #     cdef const RLE **rles_ptr = <const RLE **> malloc(len(rles) * sizeof(RLE*))
-    #     if not rles_ptr:
-    #         raise MemoryError("Failed to allocate memory for RLE pointers")
-    #
-    #     cdef RLECy result
-    #     cdef uint[::1] bfs
-    #
-    #     try:
-    #         for i, rle in enumerate(rles):
-    #             rles_ptr[i] = &(<RLECy> rle).r
-    #
-    #         result = RLECy()
-    #         bfs = np.ascontiguousarray(boolfuncs, dtype=np.uint32)
-    #         rleMergeMultiFunc(rles_ptr, &result.r, len(rles), &bfs[0])
-    #         return result
-    #     finally:
-    #         free(rles_ptr)
 
     @staticmethod
     def merge_many_multifunc(rles: Sequence[RLECy], boolfuncs: Iterable[int]):

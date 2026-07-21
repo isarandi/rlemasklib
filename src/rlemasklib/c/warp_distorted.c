@@ -27,10 +27,14 @@ static void _clipToValid(double p[2], struct ValidRegion *valid, bool distorted)
 static bool _hasNonZero(const double d[12]);
 static void _undistortPoint(const double p_[2], double pu[2], const double d[12], struct ValidRegion *valid);
 static void _distortPoint(const double pu_[2], double p[2], const double d[12], struct ValidRegion *valid);
+static void _applyTiltH(const double T[9], const double p_in[2], double p_out[2]);
 static double _transformDistortedY(double x, double y, struct CameraChange *cc);
 static double _transformDistortedX(double y, double x, struct CameraChange *cc);
+static double _transformDistortedXGeneric(double y, double x, struct CameraChange *cc);
 static void _transformDistorted(const double inp[2], double outp[2], struct CameraChange *cc);
 static void _matmul_A_BT_3x3(const double A[9], const double B[9], double C[9]);
+static void _matmul_3x3(const double A[9], const double B[9], double C[9]);
+static void _rotateTilt90(const double T[9], double T_out[9], int k);
 //----------------------------------------------------------
 
 bool rleWarpDistorted(
@@ -87,6 +91,12 @@ bool rleWarpDistorted(
         cc.d2[2] *= -1;
         cc.d2[10] *= -1;
         cc.d2[11] *= -1;
+        // conjugate the tilt homography by the normalized-coordinate y-flip diag(1,-1,1):
+        // entries with exactly one index in the y row/column change sign
+        cc.t2[1] *= -1;
+        cc.t2[3] *= -1;
+        cc.t2[5] *= -1;
+        cc.t2[7] *= -1;
     }
 
     RLE tmp1;
@@ -413,23 +423,73 @@ static void _distortPoint(const double pu_[2], double p[2], const double d[12], 
 }
 
 
+static void _applyTiltH(const double T[9], const double p_in[2], double p_out[2]) {
+    double x = p_in[0];
+    double y = p_in[1];
+    double w = T[6] * x + T[7] * y + T[8];
+    // points at or beyond the tilt horizon (w <= 0) are pushed far out along their
+    // direction, so the downstream clipping handles them
+    if (w < 1e-9) {
+        w = 1e-9;
+    }
+    p_out[0] = (T[0] * x + T[1] * y + T[2]) / w;
+    p_out[1] = (T[3] * x + T[4] * y + T[5]) / w;
+}
+
 static double _transformDistortedY(double x, double y, struct CameraChange *cc) {
     // TODO: if the distortion is zero, we can simplify this by merging Ks into H
     double p_old[2] = {x, y};
     double pn_old[2];
     transformAffine(p_old, pn_old, cc->K1_inv);
+    if (cc->tilt1) {
+        _applyTiltH(cc->t1_inv, pn_old, pn_old);
+    }
     double pun_old[2];
     _undistortPoint(pn_old, pun_old, cc->d1, &cc->valid1);
     double pun_new[2];
     transformPerspective(pun_old, pun_new, cc->H);
     double pn_new[2];
     _distortPoint(pun_new, pn_new, cc->d2, &cc->valid2);
+    if (cc->tilt2) {
+        _applyTiltH(cc->t2, pn_new, pn_new);
+    }
     double p_new[2];
     transformAffine(pn_new, p_new, cc->K2);
     return p_new[1];
 }
 
+static double _transformDistortedXGeneric(double y, double x, struct CameraChange *cc) {
+    // Pass 2 in the presence of sensor tilt: the specialized per-axis solver in
+    // _transformDistortedX assumes the normalized point separates per axis over the
+    // undistorted point, which the projective tilt breaks. Instead, find the old-image y
+    // that lands on this output row via secant iteration on the exact forward mapping,
+    // then evaluate the full forward transform there.
+    double target = y;
+    double y0 = target;
+    double y1 = target + 1.0;
+    double f0 = _transformDistortedY(x, y0, cc) - target;
+    double f1 = _transformDistortedY(x, y1, cc) - target;
+    for (int i = 0; i < 20 && fabs(f1) > 1e-4; i++) {
+        double denom = f1 - f0;
+        if (fabs(denom) < 1e-12) {
+            break;
+        }
+        double y2 = y1 - f1 * (y1 - y0) / denom;
+        y0 = y1;
+        f0 = f1;
+        y1 = y2;
+        f1 = _transformDistortedY(x, y1, cc) - target;
+    }
+    double inp[2] = {x, y1};
+    double outp[2];
+    _transformDistorted(inp, outp, cc);
+    return outp[0];
+}
+
 static double _transformDistortedX(double y, double x, struct CameraChange *cc) {
+    if (cc->tilt1 || cc->tilt2) {
+        return _transformDistortedXGeneric(y, x, cc);
+    }
     double px_old = x;
     double py_new = y;
 
@@ -496,6 +556,11 @@ static void _transformDistorted(const double inp[2], double outp[2], struct Came
     double pn_old[2];
     transformAffine(inp, pn_old, cc->K1_inv);
 
+    // undo old sensor tilt (exact, it is a fixed homography)
+    if (cc->tilt1) {
+        _applyTiltH(cc->t1_inv, pn_old, pn_old);
+    }
+
     // undo old distortion
     double pun_old[2];
     _undistortPoint(pn_old, pun_old, cc->d1, &cc->valid1);
@@ -507,6 +572,11 @@ static void _transformDistorted(const double inp[2], double outp[2], struct Came
     // apply new distortion
     double pn_new[2];
     _distortPoint(pun_new, pn_new, cc->d2, &cc->valid2);
+
+    // apply new sensor tilt
+    if (cc->tilt2) {
+        _applyTiltH(cc->t2, pn_new, pn_new);
+    }
 
     // apply new intrinsics
     transformAffine(pn_new, outp, cc->K2);
@@ -526,6 +596,10 @@ static void prepareCameraChange(
     _matmul_A_BT_3x3(new_camera->R, old_camera->R, cc->H);
     memcpy(cc->d1, old_camera->d, 12 * sizeof(double));
     memcpy(cc->d2, new_camera->d, 12 * sizeof(double));
+    memcpy(cc->t1_inv, old_camera->tilt_inv, 9 * sizeof(double));
+    memcpy(cc->t2, new_camera->tilt, 9 * sizeof(double));
+    cc->tilt1 = old_camera->has_tilt;
+    cc->tilt2 = new_camera->has_tilt;
 
     cc->K2[0] = new_camera->f[0];
     cc->K2[1] = new_camera->s;
@@ -626,6 +700,13 @@ static void rotateCameraParams(
         default:
             break;
     }
+
+    if (c1->has_tilt) {
+        // the tilt homography transforms by conjugation with the same normalized-coordinate
+        // rotation that the distortion coefficient rotation above implements
+        _rotateTilt90(c1->tilt, c2->tilt, k);
+        _rotateTilt90(c1->tilt_inv, c2->tilt_inv, k);
+    }
 }
 
 static void _matmul_A_BT_3x3(const double A[9], const double B[9], double C[9]) {
@@ -639,4 +720,46 @@ static void _matmul_A_BT_3x3(const double A[9], const double B[9], double C[9]) 
     C[6] = A[6] * B[0] + A[7] * B[1] + A[8] * B[2];
     C[7] = A[6] * B[3] + A[7] * B[4] + A[8] * B[5];
     C[8] = A[6] * B[6] + A[7] * B[7] + A[8] * B[8];
+}
+
+static void _matmul_3x3(const double A[9], const double B[9], double C[9]) {
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            C[i * 3 + j] = (A[i * 3] * B[j] + A[i * 3 + 1] * B[3 + j] +
+                            A[i * 3 + 2] * B[6 + j]);
+        }
+    }
+}
+
+static void _rotateTilt90(const double T[9], double T_out[9], int k) {
+    // Conjugate the tilt homography by the normalized-coordinate rotation N_k that
+    // corresponds to the k*90-degree pixel rotation of rotateCameraParams (the same map
+    // under which the tangential/thin-prism coefficients are rotated there).
+    double N[9] = {0};
+    N[8] = 1;
+    switch (int_remainder(k, 4)) {
+        case 0:
+            N[0] = 1;
+            N[4] = 1;
+            break;
+        case 1: // (x, y) -> (-y, x)
+            N[1] = -1;
+            N[3] = 1;
+            break;
+        case 2: // (x, y) -> (-x, -y)
+            N[0] = -1;
+            N[4] = -1;
+            break;
+        case 3: // (x, y) -> (y, -x)
+            N[1] = 1;
+            N[3] = -1;
+            break;
+        default:
+            break;
+    }
+    double N_inv[9];
+    transpose_3x3(N, N_inv); // N is a rotation, so its inverse is its transpose
+    double tmp[9];
+    _matmul_3x3(N, T, tmp);
+    _matmul_3x3(tmp, N_inv, T_out);
 }
