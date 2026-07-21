@@ -75,9 +75,7 @@ cdef extern from "boolfuncs.h" nogil:
     void rleMerge2(const RLE *A, const RLE *B, RLE *M, uint boolfunc)
     void rleMergeMultiFunc(const RLE **R, RLE *M, siz n, uint *boolfuncs)
     void rleMergeDiffOr(const RLE *A, const RLE *B, const RLE *C, RLE *M)
-    void rleMergeAtLeast(const RLE **R, RLE *M, siz n, uint k)
     void rleMergeAtLeast2(const RLE **R, RLE *M, siz n, uint k)
-    void rleMergeWeightedAtLeast(const RLE **R, RLE *M, siz n, double *weights, double threshold)
     void rleMergeWeightedAtLeast2(const RLE **R, RLE *M, siz n, double *weights, double threshold)
     void rleMergeLookup(const RLE **R, RLE *M, siz n, uint64_t *multiboolfunc, siz nmbf)
 
@@ -641,7 +639,7 @@ cdef class RLECy:
                 rles_ptr[i] = &(<RLECy> rles[i]).r
 
             result = RLECy()
-            rleMergeAtLeast(rles_ptr, &result.r, len(rles), threshold)
+            rleMergeAtLeast2(rles_ptr, &result.r, len(rles), threshold)
             return result
         finally:
             free(rles_ptr)

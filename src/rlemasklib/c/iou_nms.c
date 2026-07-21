@@ -25,7 +25,8 @@ void rleIou(RLE *dt, RLE *gt, siz m, siz n, byte *iscrowd, double *o) {
                     continue;
                 }
                 siz ka, kb, a, b;
-                uint c, ca, cb, ct, i, u;
+                uint c, ca, cb, i, u;
+                siz ct; // ca + cb can reach 2^33, which would wrap in uint
                 int va, vb;
                 ca = dt[d].cnts[0];
                 ka = dt[d].m;

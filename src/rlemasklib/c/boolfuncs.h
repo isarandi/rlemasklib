@@ -43,8 +43,6 @@ void rleMergeDiffOr(const RLE *A, const RLE *B, const RLE *C, RLE *M);
 
 // in WeightedAtLeast, the sum of weights for 1 pixels must be at least `threshold`
 void rleMergeWeightedAtLeast(const RLE **R, RLE *M, siz n, double *weights, double threshold);
-// in AtLeast, at least `k` masks must have a 1 pixel at a position to set it to 1 in the output
-void rleMergeAtLeast(const RLE **R, RLE *M, siz n, uint k);
 
 // The following do not use _rleMergeCustom, but are specialized versions of rleMergePtr
 // It turns out that packing the values into an int, and figuring out the number of 1s is

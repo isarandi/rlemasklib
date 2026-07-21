@@ -42,26 +42,19 @@ struct Weights {
 // ... and calls _rleMergeCustom with the following custom function:
 static inline bool _boolfunc_weightedAtLeast(uint32_t vs, siz n, void *ptr);
 
-static inline bool _boolfunc_atLeast(uint32_t vs, siz n, void *kp);
-
-// Following are helpers for _boolfunc_atLeast and _boolfunc_weightedAtLeast
-// _boolfunc_atLeast uses popcount to count the number of 1s in the input
 // _boolfunc_weightedAtLeast uses count_trailing_zeros to find the index of the next 1 bit, and then
 // uses the index to find the weight of the corresponding mask.
 
 #if defined(__GNUC__) || defined(__clang__)
-// These functions often have single instruction hardware support
+// This function often has single instruction hardware support
 // if yes, GCC and Clang will then use the hardware instruction.
 static int count_trailing_zeros(uint32_t x) {
     return x == 0 ? 32 : __builtin_ctz(x);
 }
-static int popcount(uint32_t x) {
-    return __builtin_popcount(x);
-}
 
 #else
-// Fallback portable implementation. Actually, these code patterns are typically also recognized
-// by compilers and optimized to the same instructions as the builtins.
+// Fallback portable implementation. Actually, this code pattern is typically also recognized
+// by compilers and optimized to the same instruction as the builtin.
 static int count_trailing_zeros(uint32_t x) {
     if (x == 0) return 32;
     static const char table[32] = {
@@ -70,17 +63,53 @@ static int count_trailing_zeros(uint32_t x) {
     };
     return table[((uint32_t)((x & -x) * 0x077CB531U)) >> 27];
 }
-static int popcount(uint32_t x) {
-    int count = 0;
-    while (x) {
-        x &= (x - 1); // Clears the lowest set bit
-        count++;
-    }
-    return count;
-}
 #endif
 
 //---------------------------------------
+
+// The merge loops below consume uintMin of the current run lengths from every input in each
+// iteration. If the inputs' run-length sums differ, the smaller input exhausts early and the
+// loop stops advancing (consuming 0 forever), so equal sums are verified up front. Reaching
+// the abort means an invalid RLE was created internally or an API entry point skipped
+// validation.
+static siz _rleCntsSum(const RLE *R) {
+    siz s = 0;
+    for (siz i = 0; i < R->m; i++) {
+        s += R->cnts[i];
+    }
+    return s;
+}
+
+static void _rleCheckSumsEqual(siz sum_first, siz sum_other) {
+    if (sum_first != sum_other) {
+        fprintf(stderr, "rlemasklib: cannot merge RLEs whose run-length sums differ\n");
+        abort();
+    }
+}
+
+static void _rleCheckMergeSumsPtr(const RLE **R, siz n) {
+    siz s0 = _rleCntsSum(R[0]);
+    for (siz i = 1; i < n; i++) {
+        _rleCheckSumsEqual(s0, _rleCntsSum(R[i]));
+    }
+}
+
+static void _rleCheckMergeSumsArr(const RLE *R, siz n) {
+    siz s0 = _rleCntsSum(&R[0]);
+    for (siz i = 1; i < n; i++) {
+        _rleCheckSumsEqual(s0, _rleCntsSum(&R[i]));
+    }
+}
+
+// Constant fill with the boolean function's value on all-background input, used when a
+// malformed input has no runs despite h*w > 0.
+static void _rleInitConst(RLE *M, siz h, siz w, bool value) {
+    if (value) {
+        rleOnes(M, h, w);
+    } else {
+        rleZeros(M, h, w);
+    }
+}
 
 
 void rleComplement(const RLE *R, RLE *M, siz n) {
@@ -133,28 +162,40 @@ void rleComplementInplace(RLE *R, siz n) {
 
 
 void rleMerge2(const RLE *A, const RLE *B, RLE *M, uint boolfunc) {
-    // maximum number of runs is min(h*w+1, sum(m)) (e.g., odd-height checkerboard starting with 1)
-    rleInit(M, A->h, A->w, sizMin(A->h * A->w + 1, A->m + B->m));
-    if (M->m == 0) {
+    siz h = A->h;
+    siz w = A->w;
+    if (h == 0 || w == 0) {
+        rleInit(M, h, w, 0);
         return;
     }
 
+    // Guard against malformed inputs with m==0 but h*w>0
     if (A->m == 0 || B->m == 0) {
-        rleRealloc(M, 1);
-        M->cnts[0] = A->h * A->w;
+        _rleInitConst(M, h, w, _applyBoolFunc(false, false, boolfunc));
         return;
     }
+
+    _rleCheckSumsEqual(_rleCntsSum(A), _rleCntsSum(B));
+
+    // maximum number of runs is min(h*w+1, sum(m)) (e.g., odd-height checkerboard starting with 1),
+    // plus 1 for the zero-length background run prepended when boolfunc is true on all-background
+    rleInit(M, h, w, sizMin(h * w + 1, A->m + B->m) + 1);
 
     uint ca = A->cnts[0];
     uint cb = B->cnts[0];
-    bool v_prev = false;
+    // before the first input transition the output value is boolfunc(0,0); if that is
+    // foreground, a zero-length run keeps the background-first convention
+    bool v_prev = _applyBoolFunc(false, false, boolfunc);
     bool va = false;
     bool vb = false;
     siz m = 0;
+    if (v_prev) {
+        M->cnts[m++] = 0;
+    }
     siz a = 1;
     siz b = 1;
+    siz ct; // ca + cb can reach 2^33, which would wrap in uint
     uint cc = 0;
-    uint ct;
     do {
         uint c = uintMin(ca, cb);
         cc += c; // add the current consumed amount to the output run
@@ -185,6 +226,13 @@ void rleMerge2(const RLE *A, const RLE *B, RLE *M, uint boolfunc) {
         }
     } while (ct > 0); // continue until we consumed all runs from both A and B
 
+    // if an input starts with a zero-length run, the prepended zero may be followed by a
+    // zero-length first emission; drop the interior zero pair to keep the RLE canonical
+    if (m >= 2 && M->cnts[0] == 0 && M->cnts[1] == 0) {
+        m -= 2;
+        memmove(M->cnts, M->cnts + 2, m * sizeof(uint));
+    }
+
     rleRealloc(M, m);
 }
 
@@ -205,7 +253,6 @@ void rleMergeMultiFunc(const RLE **R, RLE *M, siz n, uint* boolfuncs) {
         return;
     }
 
-    // maximum number of runs is min(h*w+1, sum(m)) (e.g., odd-height checkerboard starting with 1)
     siz m_total = 0;
     for (siz i = 0; i < n; i++) {
         m_total += R[i]->m;
@@ -214,14 +261,21 @@ void rleMergeMultiFunc(const RLE **R, RLE *M, siz n, uint* boolfuncs) {
     // Guard against malformed inputs with m==0 but h*w>0
     for (siz i = 0; i < n; i++) {
         if (R[i]->m == 0) {
-            rleInit(M, h, w, 1);
-            M->cnts[0] = h * w;
+            bool v = false;
+            for (siz j = 1; j < n; j++) {
+                v = _applyBoolFunc(v, false, boolfuncs[j - 1]);
+            }
+            _rleInitConst(M, h, w, v);
             return;
         }
     }
 
+    _rleCheckMergeSumsPtr(R, n);
+
     RLE tmp;
-    siz m_max = sizMin(h * w + 1, m_total);
+    // maximum number of runs is min(h*w+1, sum(m)) (e.g., odd-height checkerboard starting with 1),
+    // plus 1 for the zero-length background run prepended when a boolfunc is true on all-background
+    siz m_max = sizMin(h * w + 1, m_total) + 1;
     rleInit(&tmp, h, w, m_max);
     rleInit(M, h, w, m_max);
     RLE *A = (RLE *) R[0];
@@ -238,14 +292,19 @@ void rleMergeMultiFunc(const RLE **R, RLE *M, siz n, uint* boolfuncs) {
 
         uint ca = A->cnts[0];
         uint cb = B->cnts[0];
-        bool v_prev = false;
+        // before the first input transition the output value is boolfunc(0,0); if that is
+        // foreground, a zero-length run keeps the background-first convention
+        bool v_prev = _applyBoolFunc(false, false, boolfuncs[i - 1]);
         bool va = false;
         bool vb = false;
         m = 0;
+        if (v_prev) {
+            M->cnts[m++] = 0;
+        }
         siz a = 1;
         siz b = 1;
+        siz ct; // ca + cb can reach 2^33, which would wrap in uint
         uint cc = 0;
-        uint ct;
         do {
             uint c = uintMin(ca, cb);
             cc += c; // add the current consumed amount to the output run
@@ -275,6 +334,14 @@ void rleMergeMultiFunc(const RLE **R, RLE *M, siz n, uint* boolfuncs) {
                 v_prev = v_current;
             }
         } while (ct > 0); // continue until we consumed all runs from both A and B
+
+        // if an input starts with a zero-length run, the prepended zero may be followed by a
+        // zero-length first emission; drop the interior zero pair to keep the RLE canonical
+        // (must happen per pass, so intermediates stay within the m_max bound)
+        if (m >= 2 && M->cnts[0] == 0 && M->cnts[1] == 0) {
+            m -= 2;
+            memmove(M->cnts, M->cnts + 2, m * sizeof(uint));
+        }
         M->m = m;
     }
     rleRealloc(M, m);
@@ -303,7 +370,6 @@ void rleMergePtr(const RLE **R, RLE *M, siz n, uint boolfunc) {
         return;
     }
 
-    // maximum number of runs is min(h*w+1, sum(m)) (e.g., odd-height checkerboard starting with 1)
     siz m_total = 0;
     for (siz i = 0; i < n; i++) {
         m_total += R[i]->m;
@@ -312,14 +378,21 @@ void rleMergePtr(const RLE **R, RLE *M, siz n, uint boolfunc) {
     // Guard against malformed inputs with m==0 but h*w>0
     for (siz i = 0; i < n; i++) {
         if (R[i]->m == 0) {
-            rleInit(M, h, w, 1);
-            M->cnts[0] = h * w;
+            bool v = false;
+            for (siz j = 1; j < n; j++) {
+                v = _applyBoolFunc(v, false, boolfunc);
+            }
+            _rleInitConst(M, h, w, v);
             return;
         }
     }
 
+    _rleCheckMergeSumsPtr(R, n);
+
     RLE tmp;
-    siz m_max = sizMin(h * w + 1, m_total);
+    // maximum number of runs is min(h*w+1, sum(m)) (e.g., odd-height checkerboard starting with 1),
+    // plus 1 for the zero-length background run prepended when boolfunc is true on all-background
+    siz m_max = sizMin(h * w + 1, m_total) + 1;
     rleInit(&tmp, h, w, m_max);
     rleInit(M, h, w, m_max);
     RLE *A = (RLE *)R[0];
@@ -336,14 +409,19 @@ void rleMergePtr(const RLE **R, RLE *M, siz n, uint boolfunc) {
 
         uint ca = A->cnts[0];
         uint cb = B->cnts[0];
-        bool v_prev = false;
+        // before the first input transition the output value is boolfunc(0,0); if that is
+        // foreground, a zero-length run keeps the background-first convention
+        bool v_prev = _applyBoolFunc(false, false, boolfunc);
         bool va = false;
         bool vb = false;
         m = 0;
+        if (v_prev) {
+            M->cnts[m++] = 0;
+        }
         siz a = 1;
         siz b = 1;
+        siz ct; // ca + cb can reach 2^33, which would wrap in uint
         uint cc = 0;
-        uint ct;
         do {
             uint c = uintMin(ca, cb);
             cc += c; // add the current consumed amount to the output run
@@ -373,6 +451,14 @@ void rleMergePtr(const RLE **R, RLE *M, siz n, uint boolfunc) {
                 v_prev = v_current;
             }
         } while (ct > 0); // continue until we consumed all runs from both A and B
+
+        // if an input starts with a zero-length run, the prepended zero may be followed by a
+        // zero-length first emission; drop the interior zero pair to keep the RLE canonical
+        // (must happen per pass, so intermediates stay within the m_max bound)
+        if (m >= 2 && M->cnts[0] == 0 && M->cnts[1] == 0) {
+            m -= 2;
+            memmove(M->cnts, M->cnts + 2, m * sizeof(uint));
+        }
         M->m = m;
     }
     rleRealloc(M, m);
@@ -400,7 +486,6 @@ void rleMerge(const RLE *R, RLE *M, siz n, uint boolfunc) {
         return;
     }
 
-    // maximum number of runs is min(h*w+1, sum(m)) (e.g., odd-height checkerboard starting with 1)
     siz m_total = 0;
     for (siz i = 0; i < n; i++) {
         m_total += R[i].m;
@@ -409,14 +494,21 @@ void rleMerge(const RLE *R, RLE *M, siz n, uint boolfunc) {
     // Guard against malformed inputs with m==0 but h*w>0
     for (siz i = 0; i < n; i++) {
         if (R[i].m == 0) {
-            rleInit(M, h, w, 1);
-            M->cnts[0] = h * w;
+            bool v = false;
+            for (siz j = 1; j < n; j++) {
+                v = _applyBoolFunc(v, false, boolfunc);
+            }
+            _rleInitConst(M, h, w, v);
             return;
         }
     }
 
+    _rleCheckMergeSumsArr(R, n);
+
     RLE tmp;
-    siz m_max = sizMin(h * w + 1, m_total);
+    // maximum number of runs is min(h*w+1, sum(m)) (e.g., odd-height checkerboard starting with 1),
+    // plus 1 for the zero-length background run prepended when boolfunc is true on all-background
+    siz m_max = sizMin(h * w + 1, m_total) + 1;
     rleInit(&tmp, h, w, m_max);
     rleInit(M, h, w, m_max);
     RLE *A = (RLE *) &R[0];
@@ -433,14 +525,19 @@ void rleMerge(const RLE *R, RLE *M, siz n, uint boolfunc) {
 
         uint ca = A->cnts[0];
         uint cb = B->cnts[0];
-        bool v_prev = false;
+        // before the first input transition the output value is boolfunc(0,0); if that is
+        // foreground, a zero-length run keeps the background-first convention
+        bool v_prev = _applyBoolFunc(false, false, boolfunc);
         bool va = false;
         bool vb = false;
         m = 0;
+        if (v_prev) {
+            M->cnts[m++] = 0;
+        }
         siz a = 1;
         siz b = 1;
+        siz ct; // ca + cb can reach 2^33, which would wrap in uint
         uint cc = 0;
-        uint ct;
         do {
             uint c = uintMin(ca, cb);
             cc += c; // add the current consumed amount to the output run
@@ -470,6 +567,14 @@ void rleMerge(const RLE *R, RLE *M, siz n, uint boolfunc) {
                 v_prev = v_current;
             }
         } while (ct > 0); // continue until we consumed all runs from both A and B
+
+        // if an input starts with a zero-length run, the prepended zero may be followed by a
+        // zero-length first emission; drop the interior zero pair to keep the RLE canonical
+        // (must happen per pass, so intermediates stay within the m_max bound)
+        if (m >= 2 && M->cnts[0] == 0 && M->cnts[1] == 0) {
+            m -= 2;
+            memmove(M->cnts, M->cnts + 2, m * sizeof(uint));
+        }
         M->m = m;
     }
     rleRealloc(M, m);
@@ -493,9 +598,6 @@ static void _rleMergeCustom(
     if (n == 0) {
         rleInit(M, 0, 0, 0);
         return;
-    } else if (n == 1) {
-        rleCopy(R[0], M);
-        return;
     }
 
     siz h = R[0]->h;
@@ -506,21 +608,24 @@ static void _rleMergeCustom(
         return;
     }
 
-    // maximum number of runs is min(h*w+1, sum(m)) (e.g., odd-height checkerboard starting with 1)
     siz m_total = 0;
     for (siz i = 0; i < n; i++) {
         m_total += R[i]->m;
     }
-    rleInit(M, h, w, sizMin(h * w + 1, m_total));
 
     // Guard against malformed inputs with m==0 but h*w>0
     for (siz i = 0; i < n; i++) {
         if (R[i]->m == 0) {
-            rleRealloc(M, 1);
-            M->cnts[0] = h * w;
+            _rleInitConst(M, h, w, custom_func(0, n, custom_data));
             return;
         }
     }
+
+    _rleCheckMergeSumsPtr(R, n);
+
+    // maximum number of runs is min(h*w+1, sum(m)) (e.g., odd-height checkerboard starting with 1),
+    // plus 1 for the zero-length background run prepended when the function is true on all-background
+    rleInit(M, h, w, sizMin(h * w + 1, m_total) + 1);
 
     uint32_t vs = 0;  // bitset of the current value of each run, first in the lowest bit
 
@@ -531,9 +636,14 @@ static void _rleMergeCustom(
         iters[i].end = &R[i]->cnts[R[i]->m];
     }
 
-    bool v_prev = false;
+    // before the first input transition the output value is the function on all-background;
+    // if that is foreground, a zero-length run keeps the background-first convention
+    bool v_prev = custom_func(0, n, custom_data);
     siz m = 0;
     uint cc = 0;
+    if (v_prev) {
+        M->cnts[m++] = 0;
+    }
     bool more_in_any;
     do {
         // find the smallest count among the current runs
@@ -567,6 +677,13 @@ static void _rleMergeCustom(
         }
     } while (more_in_any); // continue until we consumed all runs from both A and B
 
+    // if an input starts with a zero-length run, the prepended zero may be followed by a
+    // zero-length first emission; drop the interior zero pair to keep the RLE canonical
+    if (m >= 2 && M->cnts[0] == 0 && M->cnts[1] == 0) {
+        m -= 2;
+        memmove(M->cnts, M->cnts + 2, m * sizeof(uint));
+    }
+
     rleRealloc(M, m);
     free(iters);
 }
@@ -576,9 +693,6 @@ void rleMergeWeightedAtLeast2(
 
     if (n == 0) {
         rleInit(M, 0, 0, 0);
-        return;
-    } else if (n == 1) {
-        rleCopy(R[0], M);
         return;
     }
 
@@ -590,21 +704,24 @@ void rleMergeWeightedAtLeast2(
         return;
     }
 
-    // maximum number of runs is min(h*w+1, sum(m)) (e.g., odd-height checkerboard starting with 1)
     siz m_total = 0;
     for (siz i = 0; i < n; i++) {
         m_total += R[i]->m;
     }
-    rleInit(M, h, w, sizMin(h * w + 1, m_total));
 
     // Guard against malformed inputs with m==0 but h*w>0
     for (siz i = 0; i < n; i++) {
         if (R[i]->m == 0) {
-            rleRealloc(M, 1);
-            M->cnts[0] = h * w;
+            _rleInitConst(M, h, w, 0.0 >= threshold);
             return;
         }
     }
+
+    _rleCheckMergeSumsPtr(R, n);
+
+    // maximum number of runs is min(h*w+1, sum(m)) (e.g., odd-height checkerboard starting with 1),
+    // plus 1 for the zero-length background run prepended when the function is true on all-background
+    rleInit(M, h, w, sizMin(h * w + 1, m_total) + 1);
 
     struct uintIterator *iters = safe_malloc(n * sizeof(struct uintIterator)); // the pointer to the next run of each RLE
     for (siz i = 0; i < n; i++) {
@@ -617,9 +734,14 @@ void rleMergeWeightedAtLeast2(
     double sum = 0;
     double kahan_compensation = 0;
 
-    bool v_prev = false;
+    // before the first input transition the output value is the function on all-background;
+    // if that is foreground, a zero-length run keeps the background-first convention
+    bool v_prev = sum >= threshold;
     siz m = 0;
     uint cc = 0;
+    if (v_prev) {
+        M->cnts[m++] = 0;
+    }
     bool more_in_any;
     do {
         // find the smallest count among the current runs
@@ -662,6 +784,13 @@ void rleMergeWeightedAtLeast2(
         }
     } while (more_in_any); // continue until we consumed all runs from both A and B
 
+    // if an input starts with a zero-length run, the prepended zero may be followed by a
+    // zero-length first emission; drop the interior zero pair to keep the RLE canonical
+    if (m >= 2 && M->cnts[0] == 0 && M->cnts[1] == 0) {
+        m -= 2;
+        memmove(M->cnts, M->cnts + 2, m * sizeof(uint));
+    }
+
     rleRealloc(M, m);
     free(iters);
 }
@@ -669,9 +798,6 @@ void rleMergeWeightedAtLeast2(
 void rleMergeAtLeast2(const RLE **R, RLE *M, siz n, uint k) {
     if (n == 0) {
         rleInit(M, 0, 0, 0);
-        return;
-    } else if (n == 1) {
-        rleCopy(R[0], M);
         return;
     }
 
@@ -683,21 +809,24 @@ void rleMergeAtLeast2(const RLE **R, RLE *M, siz n, uint k) {
         return;
     }
 
-    // maximum number of runs is min(h*w+1, sum(m)) (e.g., odd-height checkerboard starting with 1)
     siz m_total = 0;
     for (siz i = 0; i < n; i++) {
         m_total += R[i]->m;
     }
-    rleInit(M, h, w, sizMin(h * w + 1, m_total));
 
     // Guard against malformed inputs with m==0 but h*w>0
     for (siz i = 0; i < n; i++) {
         if (R[i]->m == 0) {
-            rleRealloc(M, 1);
-            M->cnts[0] = h * w;
+            _rleInitConst(M, h, w, k == 0);
             return;
         }
     }
+
+    _rleCheckMergeSumsPtr(R, n);
+
+    // maximum number of runs is min(h*w+1, sum(m)) (e.g., odd-height checkerboard starting with 1),
+    // plus 1 for the zero-length background run prepended when the function is true on all-background
+    rleInit(M, h, w, sizMin(h * w + 1, m_total) + 1);
 
     uint count = 0;
 
@@ -709,9 +838,14 @@ void rleMergeAtLeast2(const RLE **R, RLE *M, siz n, uint k) {
         iters[i].end = &R[i]->cnts[R[i]->m];
     }
 
-    bool v_prev = false;
+    // before the first input transition the output value is the function on all-background;
+    // if that is foreground, a zero-length run keeps the background-first convention
+    bool v_prev = count >= k;
     siz m = 0;
     uint cc = 0;
+    if (v_prev) {
+        M->cnts[m++] = 0;
+    }
     bool more_in_any;
     do {
         // find the smallest count among the current runs
@@ -749,15 +883,15 @@ void rleMergeAtLeast2(const RLE **R, RLE *M, siz n, uint k) {
         }
     } while (more_in_any); // continue until we consumed all runs from both A and B
 
+    // if an input starts with a zero-length run, the prepended zero may be followed by a
+    // zero-length first emission; drop the interior zero pair to keep the RLE canonical
+    if (m >= 2 && M->cnts[0] == 0 && M->cnts[1] == 0) {
+        m -= 2;
+        memmove(M->cnts, M->cnts + 2, m * sizeof(uint));
+    }
+
     rleRealloc(M, m);
     free(iters);
-}
-
-static inline bool _boolfunc_atLeast(uint32_t vs, siz n, void *kp) {
-    return (uint)popcount(vs) >= *(uint*)kp;
-}
-void rleMergeAtLeast(const RLE **R, RLE *M, siz n, uint k) {
-    _rleMergeCustom(R, M, n, _boolfunc_atLeast, &k);
 }
 
 static inline bool _boolfunc_weightedAtLeast(uint32_t vs, siz n, void *ptr) {
@@ -789,7 +923,12 @@ void rleMergeDiffOr(const RLE *A, const RLE *B, const RLE *C, RLE *M) {
 
 static inline bool _boolfunc_LookupMulti(uint32_t vs, siz n, void *multiboolfunc) {
     struct BoolFuncParts* mbf = (struct BoolFuncParts*) multiboolfunc;
-    return (mbf->vals[vs / 64] >> (vs % 64)) & 1;
+    siz i_part = vs / 64;
+    if (i_part >= mbf->n) {
+        // a table shorter than 2^n bits leaves the missing high entries as implicit false
+        return false;
+    }
+    return (mbf->vals[i_part] >> (vs % 64)) & 1;
 }
 
 void rleMergeLookup(const RLE **R, RLE *M, siz n, uint64_t *multiboolfunc, siz n_funcparts) {
