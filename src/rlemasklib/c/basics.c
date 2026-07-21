@@ -129,6 +129,16 @@ void rleSetInplace(RLE *R, siz y, siz x, byte value) {
                 // extend the previous run, shrink the current run
                 R->cnts[j]--;
                 R->cnts[j - 1]++;
+                if (R->cnts[j] == 0) {
+                    // only the first run may have length 0, so remove the emptied run
+                    if (j == R->m - 1) {
+                        R->m -= 1;
+                    } else {
+                        R->cnts[j - 1] += R->cnts[j + 1];
+                        memmove(R->cnts + j, R->cnts + j + 2, sizeof(uint) * (R->m - j - 2));
+                        R->m -= 2;
+                    }
+                }
             } else if (index == cnt - 1 && j < R->m - 1) {
                 // End of the run, and not the last run
                 // extend the next run, shrink the current run

@@ -2113,15 +2113,18 @@ class RLEMask:
 
         if arity == 0:
             raise ValueError("The function must take at least one argument")
+        if arity > 32:
+            raise ValueError(f"The function may take at most 32 arguments, got {arity}")
 
         multiboolfunc = 0
         for i, args in enumerate(itertools.product([False, True], repeat=arity)):
             result = int(bool(func(*reversed(args))))
             multiboolfunc |= result << i
 
+        # the table needs 2**arity bits; np.zeros so that high words beyond the value's
+        # bit length are defined (zero means false)
         mask = (1 << 64) - 1
-        n_bits = multiboolfunc.bit_length()
-        mbf = np.empty([(n_bits + 63) // 64], dtype=np.uint64)
+        mbf = np.zeros([((1 << arity) + 63) // 64], dtype=np.uint64)
         i = 0
         while multiboolfunc > 0:
             mbf[i] = mask & multiboolfunc

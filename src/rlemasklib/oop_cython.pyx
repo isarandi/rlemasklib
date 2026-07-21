@@ -63,7 +63,7 @@ cdef extern from "encode_decode.h" nogil:
     bool rleDecodeMultiValue(const RLE *R, byte *M, siz num_channels, const byte *values)
     char *rleToString(const RLE *R)
     bool rleFrString(RLE *R, const char *s, siz h, siz w)
-    void rlesToLabelMapZeroInit(const RLE **R, byte *label_map, siz n)
+    void rlesToLabelMapZeroInit(const RLE **R, byte *label_map, siz n, siz buffer_size)
     siz rleFromLabelMap(const byte *M, siz h, siz w, RLE *Rs)
 
 
@@ -573,15 +573,23 @@ cdef class RLECy:
             raise MemoryError("Failed to allocate memory for RLE pointers")
 
         cdef RLECy rle
+        cdef RLECy result
+        cdef np.ndarray[np.uint32_t, ndim=1] bfs
+        cdef uint *bfs_ptr = NULL
         cdef siz i = 0
-        for rle in rles:
-            rles_ptr[i] = &rle.r
-            i += 1
-
-        cdef np.ndarray[np.uint32_t, ndim=1] bfs = np.ascontiguousarray(boolfuncs, dtype=np.uint32)
-        cdef RLECy result = RLECy()
         try:
-            rleMergeMultiFunc(rles_ptr, &result.r, n, &bfs[0])
+            for rle in rles:
+                rles_ptr[i] = &rle.r
+                i += 1
+
+            bfs = np.ascontiguousarray(boolfuncs, dtype=np.uint32)
+            if n > 1 and <siz> bfs.shape[0] != n - 1:
+                raise ValueError(
+                    f"Expected {n - 1} boolean functions for {n} masks, got {bfs.shape[0]}")
+            if bfs.shape[0] > 0:
+                bfs_ptr = &bfs[0]
+            result = RLECy()
+            rleMergeMultiFunc(rles_ptr, &result.r, n, bfs_ptr)
             return result
         finally:
             free(rles_ptr)
@@ -594,13 +602,14 @@ cdef class RLECy:
             raise MemoryError("Failed to allocate memory for RLE pointers")
 
         cdef RLECy rle
+        cdef RLECy result
         cdef siz i = 0
-        for rle in rles:
-            rles_ptr[i] = &rle.r
-            i += 1
-
-        cdef RLECy result = RLECy()
         try:
+            for rle in rles:
+                rles_ptr[i] = &rle.r
+                i += 1
+
+            result = RLECy()
             rleMergePtr(rles_ptr, &result.r, n, boolfunc)
             return result
         finally:
@@ -608,17 +617,26 @@ cdef class RLECy:
 
     @staticmethod
     def merge_many_custom(rles: Sequence[RLECy], multiboolfunc: np.ndarray):
+        if len(rles) > 32:
+            raise ValueError(
+                f"At most 32 masks can be merged with a custom boolean function, "
+                f"got {len(rles)}")
         cdef const RLE **rles_ptr = <const RLE **> malloc(len(rles) * sizeof(RLE *))
         if not rles_ptr:
             raise MemoryError("Failed to allocate memory for RLE pointers")
 
+        cdef RLECy rle
         cdef RLECy result
         cdef uint64_t[::1] mbf
+        cdef siz i = 0
         try:
-            for i, rle in enumerate(rles):
-                rles_ptr[i] = &(<RLECy> rle).r
+            for rle in rles:
+                rles_ptr[i] = &rle.r
+                i += 1
 
             mbf = np.ascontiguousarray(multiboolfunc, dtype=np.uint64)
+            if mbf.shape[0] == 0:
+                raise ValueError("The truth table must not be empty")
             result = RLECy()
             rleMergeLookup(rles_ptr, &result.r, len(rles), &mbf[0], mbf.shape[0])
             return result
@@ -627,18 +645,21 @@ cdef class RLECy:
 
     @staticmethod
     def merge_many_weighted_atleast(rles: Sequence[RLECy], weights: np.ndarray, threshold: float):
+        if len(weights) != len(rles):
+            raise ValueError("The number of weights must be equal to the number of RLEs")
+
         cdef const RLE **rles_ptr = <const RLE **> malloc(len(rles) * sizeof(RLE *))
         if not rles_ptr:
             raise MemoryError("Failed to allocate memory for RLE pointers")
 
-        if len(weights) != len(rles):
-            raise ValueError("The number of weights must be equal to the number of RLEs")
-
+        cdef RLECy rle
         cdef RLECy result
         cdef double[::1] weights_double
+        cdef siz i = 0
         try:
-            for i in range(len(rles)):
-                rles_ptr[i] = &(<RLECy> rles[i]).r
+            for rle in rles:
+                rles_ptr[i] = &rle.r
+                i += 1
 
             weights_double = np.ascontiguousarray(weights, dtype=np.float64)
             result = RLECy()
@@ -654,10 +675,13 @@ cdef class RLECy:
         if not rles_ptr:
             raise MemoryError("Failed to allocate memory for RLE pointers")
 
+        cdef RLECy rle
         cdef RLECy result
+        cdef siz i = 0
         try:
-            for i in range(len(rles)):
-                rles_ptr[i] = &(<RLECy> rles[i]).r
+            for rle in rles:
+                rles_ptr[i] = &rle.r
+                i += 1
 
             result = RLECy()
             rleMergeAtLeast2(rles_ptr, &result.r, len(rles), threshold)
@@ -671,10 +695,13 @@ cdef class RLECy:
         if not rles_ptr:
             raise MemoryError("Failed to allocate memory for RLE pointers")
 
+        cdef RLECy rle
         cdef RLECy result
+        cdef siz i = 0
         try:
-            for i in range(len(rles)):
-                rles_ptr[i] = &(<RLECy> rles[i]).r
+            for rle in rles:
+                rles_ptr[i] = &rle.r
+                i += 1
 
             result = RLECy()
             rleConcatHorizontal(rles_ptr, &result.r, len(rles))
@@ -688,10 +715,13 @@ cdef class RLECy:
         if not rles_ptr:
             raise MemoryError("Failed to allocate memory for RLE pointers")
 
+        cdef RLECy rle
         cdef RLECy result
+        cdef siz i = 0
         try:
-            for i in range(len(rles)):
-                rles_ptr[i] = &(<RLECy> rles[i]).r
+            for rle in rles:
+                rles_ptr[i] = &rle.r
+                i += 1
 
             result = RLECy()
             rleConcatVertical(rles_ptr, &result.r, len(rles))
@@ -1131,6 +1161,10 @@ cdef class RLECy:
             if filter_func is not None:
                 selected = filter_func(areas, bboxes, centroids)
                 selected_arr = np.ascontiguousarray(selected, dtype=np.uint8)
+                if <siz> selected_arr.shape[0] != n_components:
+                    raise ValueError(
+                        f"filter_func must return one value per component "
+                        f"({n_components}), got {selected_arr.shape[0]}")
             else:
                 selected_arr = np.ones(n_components, dtype=np.uint8)
 
@@ -1219,6 +1253,10 @@ cdef class RLECy:
             # Call user filter function
             selected = filter_func(areas, bboxes, centroids)
             selected_arr = np.ascontiguousarray(selected, dtype=np.uint8)
+            if <siz> selected_arr.shape[0] != n_components:
+                raise ValueError(
+                    f"filter_func must return one value per component "
+                    f"({n_components}), got {selected_arr.shape[0]}")
 
             # Phase 2: Extract selected components
             rleConnectedComponentsExtract(
@@ -1291,6 +1329,7 @@ cdef class RLECy:
         cdef siz n
         rleNonZeroIndices(&self.r, &coords, &n)
         if n == 0:
+            free(coords)
             return np.empty((0, 2), dtype=np.uint32)
         cdef np.npy_intp shape[2]
         shape[0] = n // 2
@@ -1378,20 +1417,37 @@ cdef class RLECy:
 
         if len(rles) == 0:
             raise ValueError("Cannot create label map from empty sequence of RLEs")
+        if len(rles) > 255:
+            raise ValueError(
+                f"At most 255 masks can be merged into a uint8 label map, got {len(rles)}")
+
+        cdef RLECy rle
+        cdef RLECy first = rles[0]
+        cdef siz h = first.r.h
+        cdef siz w = first.r.w
+        for rle in rles:
+            if rle.r.h != h or rle.r.w != w:
+                raise ValueError(
+                    "All masks must have the same shape to be merged into a label map")
+
+        cdef np.ndarray[np.uint8_t, ndim=2, mode='fortran'] labelmap = np.zeros(
+            (h, w), dtype=np.uint8, order='F')
+        if h == 0 or w == 0:
+            return labelmap
 
         cdef const RLE **rles_ptr = <const RLE **> malloc(len(rles) * sizeof(RLE *))
         if not rles_ptr:
             raise MemoryError("Failed to allocate memory for RLE pointers")
 
-        cdef siz i
-        for i in range(len(rles)):
-            rles_ptr[i] = &(<RLECy> rles[i]).r
-        # prepare the zeros np array:
-        cdef np.ndarray[np.uint8_t, ndim=2, mode='fortran'] labelmap = np.zeros(
-            rles[0].shape, dtype=np.uint8, order='F')
-        rlesToLabelMapZeroInit(rles_ptr, &labelmap[0, 0], len(rles))
-        free(rles_ptr)
-        return labelmap
+        cdef siz i = 0
+        try:
+            for rle in rles:
+                rles_ptr[i] = &rle.r
+                i += 1
+            rlesToLabelMapZeroInit(rles_ptr, &labelmap[0, 0], len(rles), h * w)
+            return labelmap
+        finally:
+            free(rles_ptr)
 
     @staticmethod
     def from_label_map(label_map: np.ndarray):

@@ -129,6 +129,12 @@ void rleCrop(const RLE *R, RLE *M, siz n, const uint *bbox) {
 void rleCropInplace(RLE *R, siz n, const uint *bbox) {
     /* Crop RLEs to a specified bounding box in place.*/
     for (siz i = 0; i < n; i++) {
+        // An owned RLE with m == 0 also has alloc == NULL; it takes the early rleFree path
+        // below without touching run data, so only nonempty RLEs need the ownership check.
+        if (R[i].m > 0 && !rleOwnsData(&R[i])) {
+            fprintf(stderr, "rlemasklib: Cannot crop borrowed RLE in-place\n");
+            abort();
+        }
         uint h = R[i].h;
         uint w = R[i].w;
         siz m = R[i].m;
@@ -596,7 +602,9 @@ void rlePadReplicate(const RLE *R, RLE *M, const uint *pad_amounts) {
     uint cnt_toplef = (j_toplef == j_botlef) ? cnt_botlef : cnts[j_toplef];
     uint cnt_botrig = (j_botrig == j_toprig) ? cnt_toprig : cnts[j_botrig];
 
-    // Compute how many runs we will have in the output
+    // Compute how many runs we will have in the output.
+    // This must remain an upper bound on the runs emitted below, because the buffer
+    // is written before the m_out > total_out check at the end.
     siz total_out = v_toplef ? 1 : 0;
     if (left_col_same) {
         total_out += 1;

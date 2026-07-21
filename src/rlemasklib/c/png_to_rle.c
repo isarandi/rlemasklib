@@ -552,7 +552,9 @@ siz rlesFromLabelMapPngBytes(RLE *Rs, const byte *png_data, siz png_len) {
             rleFree(&row_major[i]);
             n_active++;
         } else {
-            Rs[i].cnts = NULL;
+            // Unused label - zero the whole entry so rleFree on it is safe even when the
+            // caller did not zero-initialize the array (caller checks cnts != NULL)
+            memset(&Rs[i], 0, sizeof(RLE));
         }
     }
 

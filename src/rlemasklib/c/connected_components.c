@@ -180,7 +180,8 @@ void rleConnectedComponentsExtract(
         uint new_label = old_to_new[old_label];
         if (new_label == m) continue;  // not selected by user
 
-        if (i == 1 || old_to_new[state->new_labels[i / 2 - 1]] != new_label || cnts[i - 1] > 0) {
+        if (i == 1 || state->new_labels[i / 2 - 1] == m ||
+            old_to_new[state->new_labels[i / 2 - 1]] != new_label || cnts[i - 1] > 0) {
             selected_run_counts[new_label] += 2;
         }
     }
@@ -500,8 +501,8 @@ static struct UnionFindNode *_rleBuildComponentsUF(
 
     siz i1 = 1, i2 = 1, r1 = cnts[0], r2 = cnts[0];
     while (i1 < m && i2 < m) {
-        siz overlap_start = uintMax(r1 + h, r2);
-        siz overlap_end = uintMin(r1 + cnts[i1] + h, r2 + cnts[i2]);
+        siz overlap_start = sizMax(r1 + h, r2);
+        siz overlap_end = sizMin(r1 + cnts[i1] + h, r2 + cnts[i2]);
         if (overlap_start < overlap_end ||
             (diagonal && overlap_start == overlap_end && overlap_start % h != 0)) {
             _uf_union(&uf[i1 / 2], &uf[i2 / 2]);

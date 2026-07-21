@@ -138,6 +138,8 @@ cdef class Masks:
 
     def __cinit__(self, h, w, n):
         self._mask = <byte *> calloc(h * w * n, sizeof(byte))
+        if self._mask == NULL and h * w * n > 0:
+            raise MemoryError(f"Failed to allocate mask buffer of {h * w * n} bytes")
         self._h = h
         self._w = w
         self._n = n
@@ -168,12 +170,14 @@ def _to_leb128_dicts(RLEs Rs):
         c_string = rleToString(<RLE *> &Rs._R[i])
         if c_string == NULL:
             raise MemoryError("rleToString allocation failed")
-        py_string = c_string
+        try:
+            py_string = c_string
+        finally:
+            free(c_string)
         objs.append({
             'size': [Rs._R[i].h, Rs._R[i].w],
             'counts': py_string
         })
-        free(c_string)
     return objs
 
 def _to_uncompressed_dicts(RLEs Rs):
@@ -279,7 +283,9 @@ def merge(rleObjs, boolfunc=14):
 
 def area(rleObjs):
     cdef RLEs Rs = _from_leb128_dicts(rleObjs)
-    cdef uint *_a = <uint *> malloc(Rs._n * sizeof(uint))  # TODO: NULL check
+    cdef uint *_a = <uint *> malloc(Rs._n * sizeof(uint))
+    if _a == NULL:
+        raise MemoryError("Failed to allocate area buffer")
     rleArea(Rs._R, Rs._n, _a)
     cdef np.npy_intp shape[1]
     shape[0] = <np.npy_intp> Rs._n
@@ -393,7 +399,9 @@ def iou(dt, gt, pyiscrowd):
         _iouFun = _bbIou
     else:
         raise TypeError('input data type not allowed.')
-    _iou = <double *> malloc(m * n * sizeof(double))  # TODO: NULL check
+    _iou = <double *> malloc(m * n * sizeof(double))
+    if _iou == NULL:
+        raise MemoryError("Failed to allocate IoU buffer")
     shape[0] = <np.npy_intp> m * n
     iou = np.PyArray_SimpleNewFromData(1, shape, np.NPY_DOUBLE, _iou)
     PyArray_ENABLEFLAGS(iou, np.NPY_ARRAY_OWNDATA)
@@ -403,7 +411,9 @@ def iou(dt, gt, pyiscrowd):
 def toBbox(rleObjs):
     cdef RLEs Rs = _from_leb128_dicts(rleObjs)
     cdef siz n = Rs.n
-    cdef BB _bb = <BB> malloc(4 * n * sizeof(double))  # TODO: NULL check
+    cdef BB _bb = <BB> malloc(4 * n * sizeof(double))
+    if _bb == NULL:
+        raise MemoryError("Failed to allocate bounding box buffer")
     rleToBbox(<const RLE *> Rs._R, _bb, n)
     cdef np.npy_intp shape[1]
     shape[0] = <np.npy_intp> 4 * n
@@ -476,7 +486,9 @@ def removeSmallComponents(rleObj, min_size=1, connectivity=4):
 def centroid(rleObjs):
     cdef RLEs Rs = _from_leb128_dicts(rleObjs)
     cdef siz n = Rs.n
-    cdef double *_xys = <double *> malloc(2 * n * sizeof(double))  # TODO: NULL check
+    cdef double *_xys = <double *> malloc(2 * n * sizeof(double))
+    if _xys == NULL:
+        raise MemoryError("Failed to allocate centroid buffer")
     rleCentroid(<const RLE *> Rs._R, _xys, n)
     cdef np.npy_intp shape[1]
     shape[0] = <np.npy_intp> 2 * n

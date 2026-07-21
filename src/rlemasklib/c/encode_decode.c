@@ -236,10 +236,10 @@ bool rleDecodeBroadcast(const RLE *R, byte *M, siz num_channels, byte value) {
     for (siz j = 0; j < (R->m/2)*2; j++) {
         uint cnt = R->cnts[j];
         siz byte_cnt = cnt * num_channels;
+        if (M + byte_cnt > end) {
+            return false;
+        }
         if (j % 2) {
-            if (M + byte_cnt > end) {
-                return false;
-            }
             memset(M, value, byte_cnt);
         }
         M += byte_cnt;
@@ -253,8 +253,8 @@ static bool rleDecodeRGB(const RLE *R, byte *M, const byte *values) {
 
     for (siz j = 0; j < (R->m/2)*2; j++) {
         uint cnt = R->cnts[j];
+        if (M + cnt * 3 > end) return false;
         if (j % 2) {
-            if (M + cnt * 3 > end) return false;
             for (siz k = 0; k < cnt; k++) {
                 M[0] = v0; M[1] = v1; M[2] = v2;
                 M += 3;
@@ -273,8 +273,8 @@ static bool rleDecodeRGBA(const RLE *R, byte *M, const byte *values) {
 
     for (siz j = 0; j < (R->m/2)*2; j++) {
         uint cnt = R->cnts[j];
+        if (M + cnt * 4 > end) return false;
         if (j % 2) {
-            if (M + cnt * 4 > end) return false;
             for (siz k = 0; k < cnt; k++) {
                 memcpy(M, &v32, 4);
                 M += 4;
@@ -291,8 +291,8 @@ static bool rleDecodeMultiValueGeneric(const RLE *R, byte *M, siz num_channels, 
 
     for (siz j = 0; j < (R->m/2)*2; j++) {
         uint cnt = R->cnts[j];
+        if (M + cnt * num_channels > end) return false;
         if (j % 2) {
-            if (M + cnt * num_channels > end) return false;
             for (siz k = 0; k < cnt; k++) {
                 memcpy(M, values, num_channels);
                 M += num_channels;
@@ -485,6 +485,14 @@ bool rleFrString(RLE *R, const char *s, siz h, siz w) {
         return true;
     }
 
+    if (!s[0]) {
+        // An empty string cannot encode h*w > 0 pixels. Also, rleInit with m == 0 leaves
+        // alloc == NULL, indistinguishable from a borrowed RLE, so the rleRealloc below
+        // would abort on it.
+        rleInit(R, h, w, 0);
+        return false;
+    }
+
     uint *cnts = rleInit(R, h, w, strlen(s));
 
     siz m = 0;
@@ -529,14 +537,22 @@ done:
 }
 
 
-void rlesToLabelMapZeroInit(const RLE **Rs, byte *M, siz n) {
+void rlesToLabelMapZeroInit(const RLE **Rs, byte *M, siz n, siz buffer_size) {
     for (siz i = 0; i < n; i++) {
         siz r = 0;
         uint *cnts = Rs[i]->cnts;
         siz m = Rs[i]->m;
         for (siz j = 1; j < m; j += 2) {
             r += cnts[j - 1];
-            memset(M + r, i + 1, cnts[j]);
+            if (r >= buffer_size) {
+                // a malformed RLE with sum(cnts) > buffer_size must not write past the buffer
+                break;
+            }
+            siz len = cnts[j];
+            if (len > buffer_size - r) {
+                len = buffer_size - r;
+            }
+            memset(M + r, i + 1, len);
             r += cnts[j];
         }
     }
@@ -612,8 +628,9 @@ siz rleFromLabelMap(const byte *M, siz h, siz w, RLE *Rs) {
             Rs[i].m = k[i];
             n_active++;
         } else {
-            // Unused label - leave as NULL (caller checks cnts != NULL)
-            Rs[i].cnts = NULL;
+            // Unused label - zero the whole entry so rleFree on it is safe even when the
+            // caller did not zero-initialize the array (caller checks cnts != NULL)
+            memset(&Rs[i], 0, sizeof(RLE));
         }
     }
 
