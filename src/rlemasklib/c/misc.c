@@ -366,26 +366,4 @@ void rleContours(const RLE *R, RLE *M) {
     rleFree(&up_down_left_right);
 }
 
-void rleHorizContours(const RLE *R, RLE *M) {
-    if (R->m <= 1 || R->h == 0 || R->w == 0) {
-        rleZeros(M, R->h, R->w);
-        return;
-    }
-
-    RLE shifted;
-    rleCopy(R, &shifted);
-    shifted.cnts[0] += shifted.h;
-    uint r = 0;
-    for (siz i = shifted.m - 1; i > 0; i--) {
-        r += shifted.cnts[i];
-        if (r > R->h) {
-            shifted.cnts[i] = r - R->h;
-            shifted.m = i + 1;
-            break;
-        }
-    }
-    rleMerge2(R, &shifted, M, BOOLFUNC_XOR);
-    rleFree(&shifted);
-}
-
 

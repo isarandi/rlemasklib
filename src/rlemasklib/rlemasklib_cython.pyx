@@ -86,28 +86,6 @@ cdef extern from "transpose_flip.h" nogil:
     void rleTranspose(const RLE *R, RLE *M)
 
 
-#
-# def leb128_enc(np.ndarray[np.int32_t, ndim=1] cnts):
-#     cdef char *encoded
-#     cdef siz n_encoded
-#     leb128_encode(<int *> cnts.data, cnts.shape[0], &encoded, &n_encoded)
-#     cdef np.npy_intp shape[1]
-#     shape[0] = <np.npy_intp> n_encoded
-#     a = np.PyArray_SimpleNewFromData(1, shape, np.NPY_UINT8, encoded)
-#     PyArray_ENABLEFLAGS(a, np.NPY_ARRAY_OWNDATA)
-#     return a
-#
-# def leb128_enc2(np.ndarray[np.int32_t, ndim=1] cnts):
-#     cdef char *encoded
-#     cdef siz n_encoded
-#     leb128_encode2(<int *> cnts.data, cnts.shape[0], &encoded, &n_encoded)
-#     cdef np.npy_intp shape[1]
-#     shape[0] = <np.npy_intp> n_encoded
-#     a = np.PyArray_SimpleNewFromData(1, shape, np.NPY_UINT8, encoded)
-#     PyArray_ENABLEFLAGS(a, np.NPY_ARRAY_OWNDATA)
-#     return a
-
-
 # python class to wrap RLE array in C
 # the class handles the memory allocation and deallocation
 cdef class RLEs:

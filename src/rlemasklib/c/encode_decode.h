@@ -13,10 +13,3 @@ siz rleFromLabelMap(const byte *M, siz h, siz w, RLE *Rs);
 
 char *rleToString(const RLE *R);
 bool rleFrString(RLE *R, const char *s, siz h, siz w);
-
-
-
-void leb128_encode(const int *cnts, siz m, char **out, siz *n_out);
-void leb128_decode(const char *s, siz n, int **cnts_out, siz *m_out);
-void leb_coco_encode(const int *cnts, siz m, char **out, siz *n_out);
-void leb_coco_decode(const char *s, siz n, int **cnts_out, siz *m_out);
