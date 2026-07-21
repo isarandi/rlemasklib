@@ -219,7 +219,7 @@ void rleFrPoly(RLE *R, const double *xy, siz k, siz h, siz w) {
         if (u[j] != u[j - 1]) {
             double xd = u[j] < u[j - 1] ? u[j] : u[j] - 1;
             xd = (xd + .5) / scale - .5;
-            if (floor(xd) != xd || xd < 0 || xd > w - 1) {
+            if (floor(xd) != xd || xd < 0 || xd > (double) w - 1) {
                 continue;
             }
             double yd = v[j] < v[j - 1] ? v[j] : v[j - 1];
@@ -234,7 +234,7 @@ void rleFrPoly(RLE *R, const double *xy, siz k, siz h, siz w) {
     k = m;
     uint *a = rleInit(R, h, w, k + 1);
     for (siz j = 0; j < k; j++) {
-        a[j] = (uint) (x[j] * (int) (h) + y[j]);
+        a[j] = (uint) ((int64_t) x[j] * (int64_t) h + y[j]);
     }
     a[k++] = (uint) (h * w);
     free(u);
@@ -256,8 +256,8 @@ void rleFrCircle(RLE *R, const double *center_xy, double radius, siz h, siz w) {
     double cy = center_xy[1];
     double r_sq = radius * radius;
 
-    uint xstart = uintClip(floor(cx - radius + 1), 0, w);
-    uint xend = uintClip(ceil(cx + radius), xstart, w);
+    uint xstart = (uint) doubleClip(floor(cx - radius + 1), 0, w);
+    uint xend = (uint) doubleClip(ceil(cx + radius), xstart, w);
 
     if (radius <= 0 || h == 0 || w == 0 || xstart == xend) {
         rleInit(R, h, w, 0);
@@ -275,8 +275,8 @@ void rleFrCircle(RLE *R, const double *center_xy, double radius, siz h, siz w) {
     for (uint x = xstart; x < xend; x++) {
         double dx = cx - (double) x;
         double dy = sqrt(r_sq - dx * dx);
-        uint ystart = uintClip(floor(cy - dy + 1), 0, h);
-        uint yend = uintClip(ceil(cy + dy), ystart, h);
+        uint ystart = (uint) doubleClip(floor(cy - dy + 1), 0, h);
+        uint yend = (uint) doubleClip(ceil(cy + dy), ystart, h);
         cnts[m++] += ystart; // 0s on top
         cnts[m++] = yend - ystart; // 1s
         cnts[m] = h - yend; // 0s on bottom

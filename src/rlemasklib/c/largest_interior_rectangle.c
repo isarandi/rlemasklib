@@ -451,7 +451,7 @@ static void rleLeftRightContours(const RLE *R, RLE *R_left, RLE *R_right) {
     // remove last column (by changing the size of the last run and setting the num of runs)
     // this way the rest of the run info is not lost, so we don't have to make a new copy
     uint r = 0;
-    for (siz i = shifted.m - 1; i > 0; i--) {
+    for (siz i = shifted.m; i-- > 0;) {
         r += shifted.cnts[i];
         if (r > R->h) {
             shifted.cnts[i] = r - R->h;
@@ -557,13 +557,13 @@ void rleLargestInteriorRectangleAroundCenter(
                 next_target += R->h;
             } else {
                 // this many pixels of row icy are in this run
-                uint runwidth = (r_end - next_target) / R->h + 1;
+                uint runwidth = (r_end - 1 - next_target) / R->h + 1;
                 if (j % 2 == 0) { // run of zeros
                     // its enough to set the smallest distance to 0
                     // the smallest distance depends on whether the run is to left or right of icx
                     // icx cannot be part of a 0s run -- we checked that at the start
                     uint xfirst_icy = next_target / R->h;
-                    uint xlast_icy = (r_end - icy) / R->h;
+                    uint xlast_icy = (r_end - 1 - icy) / R->h;
                     uint xdist = xlast_icy < icx ? icx - xlast_icy : xfirst_icy - icx;
                     if (xdist < xdist_earliest_zero) {
                         xdist_earliest_zero = xdist;

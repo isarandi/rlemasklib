@@ -31,13 +31,15 @@ void rleDilateVerticalInplace(RLE *R, uint up, uint down) {
     siz r = cnts[0];
     for (siz j = 1; j < m; j += 2) {
         if (r % h != 0) {
-            uint amount = uintMin(cnts[j - 1], up);
+            // extend at most to the top of the column, to avoid bleeding into the previous column
+            uint amount = uintMin(uintMin(cnts[j - 1], up), r % h);
             cnts[j] += amount;
             cnts[j - 1] -= amount;
             r -= amount;
         }
         if (j + 1 < m && (r + cnts[j]) % h != 0) {
-            uint amount = uintMin(cnts[j + 1], down);
+            // extend at most to the bottom of the column, to avoid bleeding into the next column
+            uint amount = uintMin(uintMin(cnts[j + 1], down), h - (r + cnts[j]) % h);
             cnts[j] += amount;
             cnts[j + 1] -= amount;
         }
