@@ -3,5 +3,5 @@ all:
 	rm -rf build
 
 install:
-	python setup.py build_ext install
+	pip install .
 	rm -rf build
