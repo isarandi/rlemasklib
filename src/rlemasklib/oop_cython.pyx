@@ -8,12 +8,9 @@ import zlib
 import numpy as np
 cimport numpy as np
 from libc.stdlib cimport malloc, free, calloc
-from libc.string cimport strlen, memcpy
-from typing import Union, Optional
+from typing import Optional
 from collections.abc import Sequence, Iterable
-from .boolfunc import BoolFunc
 from libc.stdint cimport uint64_t, uint32_t, uint8_t
-import struct
 
 # intialized Numpy. must do.
 np.import_array()
@@ -175,8 +172,8 @@ cdef extern from "warp_perspective.h" nogil:
     void rleWarpPerspective(const RLE *R, RLE *M, siz h_out, siz w_out, double *H)
 
 cdef extern from "png_to_rle.h" nogil:
-    bint rleFromPngBytes(RLE *R, const byte *data, siz length, int threshold)
-    bint rleFromPngFile(RLE *R, const char *path, int threshold)
+    bint rleFromPngBytes(RLE *R, const byte *data, siz length, int threshold, int channel)
+    bint rleFromPngFile(RLE *R, const char *path, int threshold, int channel)
     siz rlesFromLabelMapPngBytes(RLE *Rs, const byte *data, siz length)
     siz rlesFromLabelMapPngFile(RLE *Rs, const char *path)
 
@@ -329,15 +326,15 @@ cdef class RLECy:
             center, dtype=np.float64)
         rleFrCircle(&self.r, <double *> center_double.data, radius, imshape[0], imshape[1])
 
-    def _i_from_png_file(self, str path, int threshold=1):
+    def _i_from_png_file(self, str path, int threshold=1, int channel=-1):
         cdef bytes path_bytes = path.encode('utf-8')
-        if not rleFromPngFile(&self.r, <const char *> path_bytes, threshold):
-            raise ValueError("Failed to read PNG (must be 8-bit grayscale)")
+        if not rleFromPngFile(&self.r, <const char *> path_bytes, threshold, channel):
+            raise ValueError("Failed to read PNG (must be 8-bit, supported types: grayscale, gray+alpha, RGB, RGBA)")
 
-    def _i_from_png_bytes(self, data, int threshold=1):
+    def _i_from_png_bytes(self, data, int threshold=1, int channel=-1):
         cdef const byte[::1] data_view = data
-        if not rleFromPngBytes(&self.r, &data_view[0], len(data_view), threshold):
-            raise ValueError("Failed to decode PNG (must be 8-bit grayscale)")
+        if not rleFromPngBytes(&self.r, &data_view[0], len(data_view), threshold, channel):
+            raise ValueError("Failed to decode PNG (must be 8-bit, supported types: grayscale, gray+alpha, RGB, RGBA)")
 
     @staticmethod
     cdef RLECy _r_from_C_rle(RLE *rle, steal=False):

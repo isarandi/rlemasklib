@@ -25,7 +25,7 @@ if sys.platform == "win32":
     ]  # /O2=optimize, /wd4505=disable unused function warning
     extra_link_args = []
 else:
-    extra_compile_args = ["-Wno-cpp", "-Wno-unused-function", "-std=c99", "-O3"]
+    extra_compile_args = ["-Wno-cpp", "-Wno-unused-function", "-Wno-int-in-bool-context", "-std=c99", "-O3"]
     extra_link_args = []
 
 include_dirs = [np.get_include(), "src/rlemasklib/c"]

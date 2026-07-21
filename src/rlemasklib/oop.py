@@ -230,9 +230,10 @@ class RLEMask:
     def from_png(
             path: Union[str, os.PathLike, None] = None,
             data: Union[bytes, bytearray, memoryview, None] = None,
-            threshold: int = 1
+            threshold: int = 1,
+            channel: int = -1
     ) -> "RLEMask":
-        """Create an RLEMask from an 8-bit grayscale PNG.
+        """Create an RLEMask from an 8-bit PNG.
 
         This is a fast path that avoids materializing the full pixel array,
         converting directly from PNG to RLE representation.
@@ -242,25 +243,25 @@ class RLEMask:
             data: PNG data as bytes, bytearray, or memoryview.
             threshold: Pixels with values >= threshold become foreground (1).
                 Default is 1, so any nonzero pixel is foreground.
+            channel: Which channel to extract from multi-channel PNGs.
+                -1 (default): grayscale PNGs only (rejects multi-channel).
+                0, 1, 2, ...: extract that channel index. E.g., for an RGBA PNG,
+                channel=3 extracts the alpha channel.
 
         Returns:
             An RLEMask object representing the mask.
 
         Raises:
             ValueError: If neither path nor data is provided, or both are provided,
-                or if the PNG is not 8-bit grayscale.
-
-        Note:
-            Only 8-bit grayscale PNGs are supported. For other formats, use
-            PIL/Pillow/OpenCV to load the image and convert with `RLEMask.from_array()`.
+                or if the PNG format is unsupported, or if channel is out of range.
         """
         if (path is None) == (data is None):
             raise ValueError("Exactly one of 'path' or 'data' must be provided")
         result = RLEMask._init()
         if path is not None:
-            result.cy._i_from_png_file(str(path), threshold)
+            result.cy._i_from_png_file(str(path), threshold, channel)
         else:
-            result.cy._i_from_png_bytes(data, threshold)
+            result.cy._i_from_png_bytes(data, threshold, channel)
         return result
 
     @staticmethod

@@ -19,31 +19,34 @@ static const byte PNG_SIG[8] = {0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'};
 
 // Forward declarations
 static inline uint32_t read_be32(const byte *p);
-static void unfilter_none(byte *curr, const byte *prev, siz width);
-static void unfilter_sub(byte *curr, const byte *prev, siz width);
-static void unfilter_up(byte *curr, const byte *prev, siz width);
-static void unfilter_avg(byte *curr, const byte *prev, siz width);
+static void unfilter_none(byte *curr, const byte *prev, siz width_bytes);
+static void unfilter_sub(byte *curr, const byte *prev, siz width_bytes, siz bpp);
+static void unfilter_up(byte *curr, const byte *prev, siz width_bytes);
+static void unfilter_avg(byte *curr, const byte *prev, siz width_bytes, siz bpp);
 static inline int paeth_predictor(int a, int b, int c);
-static void unfilter_paeth(byte *curr, const byte *prev, siz width);
-static bool parse_png_grayscale(const byte *png_data, siz png_len, siz *width_out, siz *height_out, byte **filtered_out);
+static void unfilter_paeth(byte *curr, const byte *prev, siz width_bytes, siz bpp);
+static bool parse_png(const byte *png_data, siz png_len, int channel, siz *width_out, siz *height_out, siz *channels_out, byte **filtered_out);
 
 // Unfilter a row in-place. Returns false on invalid filter_type.
-static inline bool unfilter_row(byte *curr_row, byte *prev_row, siz width, byte filter_type) {
+// width_bytes is the number of data bytes per row (width * channels), bpp is bytes per pixel.
+static inline bool unfilter_row(byte *curr_row, byte *prev_row, siz width_bytes, siz bpp, byte filter_type) {
     switch (filter_type) {
-        case 0: unfilter_none(curr_row, prev_row, width); return true;
-        case 1: unfilter_sub(curr_row, prev_row, width); return true;
-        case 2: unfilter_up(curr_row, prev_row, width); return true;
-        case 3: unfilter_avg(curr_row, prev_row, width); return true;
-        case 4: unfilter_paeth(curr_row, prev_row, width); return true;
+        case 0: unfilter_none(curr_row, prev_row, width_bytes); return true;
+        case 1: unfilter_sub(curr_row, prev_row, width_bytes, bpp); return true;
+        case 2: unfilter_up(curr_row, prev_row, width_bytes); return true;
+        case 3: unfilter_avg(curr_row, prev_row, width_bytes, bpp); return true;
+        case 4: unfilter_paeth(curr_row, prev_row, width_bytes, bpp); return true;
         default: return false;
     }
 }
 
 // Scan rows for nonzero pixels (threshold=1). Returns k (number of runs), or 0 on error.
+// Only used for single-channel (bpp=1) data.
 static siz scan_rows_nonzero(
     byte *filtered, byte *zero_row, uint *cnts,
     siz width, siz height, siz row_stride
 ) {
+    siz bpp = 1;
     siz k = 0;
     byte prev = 0;
     siz last_switch_pos = 0;
@@ -52,7 +55,7 @@ static siz scan_rows_nonzero(
     for (siz row = 0; row < height; row++) {
         byte *curr_row = filtered + row * row_stride + 1;
         byte *prev_row = (row == 0) ? zero_row : filtered + (row - 1) * row_stride + 1;
-        if (!unfilter_row(curr_row, prev_row, width, filtered[row * row_stride]))
+        if (!unfilter_row(curr_row, prev_row, width, bpp, filtered[row * row_stride]))
             return 0;
 
         siz i = 0;
@@ -102,10 +105,12 @@ static siz scan_rows_nonzero(
 }
 
 // Scan rows with threshold >= 128 (high-bit check). Returns k, or 0 on error.
+// Only used for single-channel (bpp=1) data.
 static siz scan_rows_thresh128(
     byte *filtered, byte *zero_row, uint *cnts,
     siz width, siz height, siz row_stride
 ) {
+    siz bpp = 1;
     siz k = 0;
     byte prev = 0;
     siz last_switch_pos = 0;
@@ -114,7 +119,7 @@ static siz scan_rows_thresh128(
     for (siz row = 0; row < height; row++) {
         byte *curr_row = filtered + row * row_stride + 1;
         byte *prev_row = (row == 0) ? zero_row : filtered + (row - 1) * row_stride + 1;
-        if (!unfilter_row(curr_row, prev_row, width, filtered[row * row_stride]))
+        if (!unfilter_row(curr_row, prev_row, width, bpp, filtered[row * row_stride]))
             return 0;
 
         siz i = 0;
@@ -162,10 +167,13 @@ static siz scan_rows_thresh128(
 }
 
 // Scan rows with generic threshold (scalar only). Returns k, or 0 on error.
+// bpp = bytes per pixel, channel = which channel byte to read within each pixel.
 static siz scan_rows_generic(
     byte *filtered, byte *zero_row, uint *cnts,
-    siz width, siz height, siz row_stride, int threshold
+    siz width, siz height, siz row_stride, int threshold,
+    siz bpp, siz channel
 ) {
+    siz width_bytes = width * bpp;
     siz k = 0;
     byte prev = 0;
     siz last_switch_pos = 0;
@@ -174,11 +182,11 @@ static siz scan_rows_generic(
     for (siz row = 0; row < height; row++) {
         byte *curr_row = filtered + row * row_stride + 1;
         byte *prev_row = (row == 0) ? zero_row : filtered + (row - 1) * row_stride + 1;
-        if (!unfilter_row(curr_row, prev_row, width, filtered[row * row_stride]))
+        if (!unfilter_row(curr_row, prev_row, width_bytes, bpp, filtered[row * row_stride]))
             return 0;
 
         for (siz i = 0; i < width; i++, pixel_pos++) {
-            byte current = curr_row[i] >= threshold;
+            byte current = curr_row[i * bpp + channel] >= threshold;
             if (current != prev) {
                 cnts[k++] = (uint)(pixel_pos - last_switch_pos);
                 last_switch_pos = pixel_pos;
@@ -190,7 +198,7 @@ static siz scan_rows_generic(
     return k;
 }
 
-bool rleFromPngFile(RLE *R, const char *path, int threshold) {
+bool rleFromPngFile(RLE *R, const char *path, int threshold, int channel) {
     FILE *f = fopen(path, "rb");
     if (!f) return false;
 
@@ -217,7 +225,7 @@ bool rleFromPngFile(RLE *R, const char *path, int threshold) {
     }
     fclose(f);
 
-    bool result = rleFromPngBytes(R, data, size, threshold);
+    bool result = rleFromPngBytes(R, data, size, threshold, channel);
     free(data);
     return result;
 }
@@ -226,34 +234,37 @@ bool rleFromPngBytes(
     RLE *R,
     const byte *png_data,
     siz png_len,
-    int threshold
+    int threshold,
+    int channel
 ) {
-    siz width, height;
+    siz width, height, channels;
     byte *filtered;
-    if (!parse_png_grayscale(png_data, png_len, &width, &height, &filtered)) {
+    if (!parse_png(png_data, png_len, channel, &width, &height, &channels, &filtered)) {
         return false;
     }
 
-    siz row_stride = 1 + width;
+    siz bpp = channels;
+    siz ch = (channel < 0) ? 0 : (siz)channel;
+    siz row_stride = 1 + width * bpp;
 
     // Zero buffer for first row's "previous" (no actual previous row)
-    byte *zero_row = calloc(width, 1);
+    byte *zero_row = calloc(width * bpp, 1);
     if (!zero_row) {
         free(filtered);
         return false;
     }
 
-    // Build RLE in row-major order (will transpose at end)
+    // Build RLE in row-major order (will transpose at end).
     RLE row_major;
     uint *cnts = rleInit(&row_major, width, height, height * width + 1);
 
     siz k;
-    if (threshold == 1) {
+    if (bpp == 1 && threshold == 1) {
         k = scan_rows_nonzero(filtered, zero_row, cnts, width, height, row_stride);
-    } else if (threshold == 128) {
+    } else if (bpp == 1 && threshold == 128) {
         k = scan_rows_thresh128(filtered, zero_row, cnts, width, height, row_stride);
     } else {
-        k = scan_rows_generic(filtered, zero_row, cnts, width, height, row_stride, threshold);
+        k = scan_rows_generic(filtered, zero_row, cnts, width, height, row_stride, threshold, bpp, ch);
     }
 
     if (k == 0) {
@@ -275,11 +286,24 @@ bool rleFromPngBytes(
     return true;
 }
 
-// Parse 8-bit grayscale PNG and return decompressed filtered data.
+// Map PNG color_type to number of channels. Returns 0 for unsupported types.
+static inline siz png_color_type_channels(byte color_type) {
+    switch (color_type) {
+        case 0: return 1;  // Grayscale
+        case 2: return 3;  // RGB
+        case 4: return 2;  // Grayscale + Alpha
+        case 6: return 4;  // RGBA
+        default: return 0; // Unsupported (palette, etc.)
+    }
+}
+
+// Parse 8-bit PNG and return decompressed filtered data.
+// channel: -1 = grayscale only, 0+ = select channel (validates against actual channel count).
 // Caller must free *filtered_out on success.
-static bool parse_png_grayscale(
+static bool parse_png(
     const byte *png_data, siz png_len,
-    siz *width_out, siz *height_out,
+    int channel,
+    siz *width_out, siz *height_out, siz *channels_out,
     byte **filtered_out
 ) {
     if (png_len < 8 + 25 || memcmp(png_data, PNG_SIG, 8) != 0) {
@@ -287,7 +311,7 @@ static bool parse_png_grayscale(
     }
 
     siz pos = 8;
-    siz width = 0, height = 0;
+    siz width = 0, height = 0, channels = 0;
 
     // Collect IDAT chunks
     byte *idat_data = NULL;
@@ -304,8 +328,11 @@ static bool parse_png_grayscale(
             if (len < 13) goto fail;
             width = read_be32(data);
             height = read_be32(data + 4);
-            // Only 8-bit grayscale
-            if (data[8] != 8 || data[9] != 0) goto fail;
+            if (data[8] != 8) goto fail;  // Only 8-bit depth
+            channels = png_color_type_channels(data[9]);
+            if (channels == 0) goto fail;  // Unsupported color type
+            if (channel == -1 && channels != 1) goto fail;  // Legacy: grayscale only
+            if (channel >= 0 && (siz)channel >= channels) goto fail;  // Channel out of range
         }
         else if (memcmp(type, "IDAT", 4) == 0) {
             if (idat_len + len > idat_cap) {
@@ -324,10 +351,10 @@ static bool parse_png_grayscale(
         pos += 12 + len;
     }
 
-    if (!width || !height || !idat_data) goto fail;
+    if (!width || !height || !channels || !idat_data) goto fail;
 
     // Decompress
-    siz filtered_len = height * (1 + width);
+    siz filtered_len = height * (1 + width * channels);
     byte *filtered = malloc(filtered_len);
     if (!filtered) goto fail;
 
@@ -344,6 +371,7 @@ static bool parse_png_grayscale(
 
     *width_out = width;
     *height_out = height;
+    *channels_out = channels;
     *filtered_out = filtered;
     return true;
 
@@ -366,11 +394,11 @@ static void unfilter_none(byte *curr, const byte *prev, siz width) {
     // Data already in place, nothing to do
 }
 
-static void unfilter_sub(byte *curr, const byte *prev, siz width) {
+static void unfilter_sub(byte *curr, const byte *prev, siz width_bytes, siz bpp) {
     (void)prev;
-    // Sequential dependency - each pixel depends on previous
-    for (siz i = 1; i < width; i++) {
-        curr[i] = (curr[i] + curr[i-1]) & 0xFF;
+    // Each byte depends on the byte bpp positions to the left
+    for (siz i = bpp; i < width_bytes; i++) {
+        curr[i] = (curr[i] + curr[i - bpp]) & 0xFF;
     }
 }
 
@@ -394,11 +422,13 @@ static void unfilter_up(byte *curr, const byte *prev, siz width) {
 #endif
 }
 
-static void unfilter_avg(byte *curr, const byte *prev, siz width) {
-    // First pixel: left = 0
-    curr[0] = (curr[0] + (prev[0] >> 1)) & 0xFF;
-    for (siz i = 1; i < width; i++) {
-        curr[i] = (curr[i] + ((curr[i-1] + prev[i]) >> 1)) & 0xFF;
+static void unfilter_avg(byte *curr, const byte *prev, siz width_bytes, siz bpp) {
+    // First bpp bytes: no left neighbor
+    for (siz i = 0; i < bpp; i++) {
+        curr[i] = (curr[i] + (prev[i] >> 1)) & 0xFF;
+    }
+    for (siz i = bpp; i < width_bytes; i++) {
+        curr[i] = (curr[i] + ((curr[i - bpp] + prev[i]) >> 1)) & 0xFF;
     }
 }
 
@@ -412,19 +442,21 @@ static inline int paeth_predictor(int a, int b, int c) {
     return c;
 }
 
-static void unfilter_paeth(byte *curr, const byte *prev, siz width) {
-    // First pixel: left=0, up_left=0
-    curr[0] = (curr[0] + prev[0]) & 0xFF;
-    for (siz i = 1; i < width; i++) {
-        int pred = paeth_predictor(curr[i-1], prev[i], prev[i-1]);
+static void unfilter_paeth(byte *curr, const byte *prev, siz width_bytes, siz bpp) {
+    // First bpp bytes: left=0, up_left=0
+    for (siz i = 0; i < bpp; i++) {
+        curr[i] = (curr[i] + paeth_predictor(0, prev[i], 0)) & 0xFF;
+    }
+    for (siz i = bpp; i < width_bytes; i++) {
+        int pred = paeth_predictor(curr[i - bpp], prev[i], prev[i - bpp]);
         curr[i] = (curr[i] + pred) & 0xFF;
     }
 }
 
 siz rlesFromLabelMapPngBytes(RLE *Rs, const byte *png_data, siz png_len) {
-    siz width, height;
+    siz width, height, channels;
     byte *filtered;
-    if (!parse_png_grayscale(png_data, png_len, &width, &height, &filtered)) {
+    if (!parse_png(png_data, png_len, -1, &width, &height, &channels, &filtered)) {
         return (siz)-1;
     }
 
@@ -452,10 +484,10 @@ siz rlesFromLabelMapPngBytes(RLE *Rs, const byte *png_data, siz png_len) {
 
         switch (filter_type) {
             case 0: unfilter_none(curr_row, prev_row, width); break;
-            case 1: unfilter_sub(curr_row, prev_row, width); break;
+            case 1: unfilter_sub(curr_row, prev_row, width, 1); break;
             case 2: unfilter_up(curr_row, prev_row, width); break;
-            case 3: unfilter_avg(curr_row, prev_row, width); break;
-            case 4: unfilter_paeth(curr_row, prev_row, width); break;
+            case 3: unfilter_avg(curr_row, prev_row, width, 1); break;
+            case 4: unfilter_paeth(curr_row, prev_row, width, 1); break;
             default:
                 free(filtered);
                 free(zero_row);
