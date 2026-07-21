@@ -21,6 +21,6 @@ bool rleFromPngFile(RLE *R, const char *path, int threshold, int channel);
 // Convert PNG label map to multiple RLE masks.
 // Label 0 is background, labels 1-255 become Rs[0]-Rs[254].
 // Active labels have cnts != NULL, unused labels have cnts = NULL.
-// Returns number of active labels, or 0 on error.
+// Returns number of active labels (0 is a valid result), or (siz)-1 on error.
 siz rlesFromLabelMapPngBytes(RLE *Rs, const byte *png_data, siz png_len);
 siz rlesFromLabelMapPngFile(RLE *Rs, const char *path);

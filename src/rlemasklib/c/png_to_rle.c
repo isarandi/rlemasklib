@@ -255,8 +255,20 @@ bool rleFromPngBytes(
     }
 
     // Build RLE in row-major order (will transpose at end).
+    // The counts buffer scales with pixel count, so allocate fallibly rather than
+    // via rleInit, whose safe_malloc aborts on OOM. Layout mirrors rleInit.
     RLE row_major;
-    uint *cnts = rleInit(&row_major, width, height, height * width + 1);
+    row_major.h = width;
+    row_major.w = height;
+    row_major.m = height * width + 1;
+    row_major.alloc = malloc(sizeof(uint) * (row_major.m + 2));
+    if (!row_major.alloc) {
+        free(filtered);
+        free(zero_row);
+        return false;
+    }
+    row_major.cnts = row_major.alloc + 1;
+    uint *cnts = row_major.cnts;
 
     siz k;
     if (bpp == 1 && threshold == 1) {
@@ -312,6 +324,7 @@ static bool parse_png(
 
     siz pos = 8;
     siz width = 0, height = 0, channels = 0;
+    bool seen_ihdr = false;
 
     // Collect IDAT chunks
     byte *idat_data = NULL;
@@ -325,12 +338,17 @@ static bool parse_png(
         if (pos + 12 + len > png_len) goto fail;
 
         if (memcmp(type, "IHDR", 4) == 0) {
+            if (seen_ihdr) goto fail;  // PNG spec: exactly one IHDR
+            seen_ihdr = true;
             if (len < 13) goto fail;
             width = read_be32(data);
             height = read_be32(data + 4);
             if (data[8] != 8) goto fail;  // Only 8-bit depth
             channels = png_color_type_channels(data[9]);
             if (channels == 0) goto fail;  // Unsupported color type
+            if (data[10] != 0 || data[11] != 0) goto fail;  // Nonstandard compression/filter method
+            if (data[12] != 0) goto fail;  // Interlaced (Adam7) unsupported
+            if (channel < -1) goto fail;  // Invalid channel index
             if (channel == -1 && channels != 1) goto fail;  // Legacy: grayscale only
             if (channel >= 0 && (siz)channel >= channels) goto fail;  // Channel out of range
         }
@@ -352,6 +370,9 @@ static bool parse_png(
     }
 
     if (!width || !height || !channels || !idat_data) goto fail;
+    // Pixel count must fit uint32 (library-wide domain); with channels <= 4 this
+    // also keeps the filtered_len computation below free of overflow.
+    if (width * height > 0xFFFFFFFF) goto fail;
 
     // Decompress
     siz filtered_len = height * (1 + width * channels);
