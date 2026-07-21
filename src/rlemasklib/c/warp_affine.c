@@ -19,15 +19,17 @@ static double _transformAffineY(double x, double y, double H[6]);
 static void rleWarpAffine1(const RLE *R, RLE *M, siz h_out, double *H);
 static void rleWarpAffine2(const RLE *R, RLE *M, siz h_out, double *H);
 
-void rleWarpAffine(const RLE *R, RLE *M, siz h_out, siz w_out, double *H) {
+bool rleWarpAffine(const RLE *R, RLE *M, siz h_out, siz w_out, double *H) {
     if (h_out == 0 || w_out == 0) {
         rleInit(M, h_out, w_out, 0);
-        return;
+        return true;
     }
     if (R->m == 0 || R->h == 0 || R->w == 0) {
         rleZeros(M, h_out, w_out);
-        return;
+        return true;
     }
+    siz h_out_orig = h_out;
+    siz w_out_orig = w_out;
 
     double H_inv[6];
     invert_affine(H, H_inv);
@@ -69,8 +71,16 @@ void rleWarpAffine(const RLE *R, RLE *M, siz h_out, siz w_out, double *H) {
             break;
     }
 
+    // the run pipeline divides by the y-y element of the k-rotated matrix, so a zero there
+    // (or a non-finite quotient) cannot be processed; return an all-zeros mask and report failure
+    if (H_rot[4] == 0 || !isfinite(H_rot[1] / H_rot[4])) {
+        rleZeros(M, h_out_orig, w_out_orig);
+        return false;
+    }
+
+    // reference point is the output-center y in the k-rotated frame (h_out/w_out already swapped for odd k)
     double pp_y_y = _transformAffineY(pp_old[0], pp_old[1] + 1, H_rot);
-    bool flip = pp_y_y < pp[1];
+    bool flip = pp_y_y < (h_out - 1) * 0.5;
     if (flip) {
         // flipmat = np.array([[1, 0, 0], [0, -1, x - 1], [0, 0, 1]], np.float64)
         // homography = flipmat @ homography
@@ -92,6 +102,7 @@ void rleWarpAffine(const RLE *R, RLE *M, siz h_out, siz w_out, double *H) {
 
     rleBackFlipRot(&tmp3, M, k, flip);
     rleFree(&tmp3);
+    return true;
 }
 
 static void rleWarpAffine1(const RLE *R, RLE *M, siz h_out, double *H) {
@@ -108,43 +119,43 @@ static void rleWarpAffine1(const RLE *R, RLE *M, siz h_out, double *H) {
     rleZeroPad(R, &tmp, 1, (uint[4]){0, 0, 0, 1});
 
     siz m = tmp.m;
-    siz h = tmp.h;
+    int64_t h = tmp.h;
     siz w_out = tmp.w + 1;
     uint *cnts = tmp.cnts;
 
     uint *cnts_out = rleInit(M, h_out, w_out, m);
     siz m_out = 0;
-    int r = 0;
-    int y_out_prev = h_out;
-    int x_prev = -1;
+    // int64_t (not siz): absolute pixel positions may exceed 2^31, while
+    // x_prev = -1 and negative num_zeros are meaningful, so unsigned won't do
+    int64_t r = 0;
+    int64_t y_out_prev = h_out;
+    int64_t x_prev = -1;
     double H3_x_p_H5;
 
     for (siz i = 1; i < m; i += 2) {
         r += cnts[i-1];
-        int cnt = cnts[i];
-        int last = r + cnt - 1;
-        int x = r / h;
+        int64_t cnt = cnts[i];
+        int64_t last = r + cnt - 1;
+        int64_t x = r / h;
 
         if (x != x_prev) {
             H3_x_p_H5 = H[3] * x + H[5];
         }
-        int y_start = r % h;
-        int y_end = last % h + 1;
+        int64_t y_start = r % h;
+        int64_t y_end = last % h + 1;
         double raw_y_start_out = H[4] * y_start + H3_x_p_H5;
         double raw_y_end_out = H[4] * y_end + H3_x_p_H5;
-        int y_start_out = intClip((int) round(raw_y_start_out), 0, h_out);
-        int y_end_out = intClip((int) round(raw_y_end_out), 0, h_out);
-        //int y_start_out = intClip((int) round(raw_y_start_out), 0, h_out);
-        //int y_end_out = intClip((int) round(_transformY(x, y_end, H)), 0, h_out);
+        int64_t y_start_out = int64Clip((int64_t) round(raw_y_start_out), 0, h_out);
+        int64_t y_end_out = int64Clip((int64_t) round(raw_y_end_out), 0, h_out);
 
         if (y_start_out > y_end_out) {
-            int tmp = y_start_out;
+            int64_t tmp = y_start_out;
             y_start_out = y_end_out;
             y_end_out = tmp;
         }
-        int cols = x - x_prev;
-        int num_zeros = y_start_out + h_out * cols - y_out_prev;
-        int num_ones = y_end_out - y_start_out;
+        int64_t cols = x - x_prev;
+        int64_t num_zeros = y_start_out + (int64_t) h_out * cols - y_out_prev;
+        int64_t num_ones = y_end_out - y_start_out;
 
         if (num_zeros < 0) {
             // we are supposed to go backwards to start the new run...
@@ -168,8 +179,8 @@ static void rleWarpAffine1(const RLE *R, RLE *M, siz h_out, double *H) {
         r += cnt;
     }
 
-    int cols = w_out - x_prev;
-    cnts_out[m_out++] = h_out * cols - y_out_prev; // run of 0s, already padded
+    int64_t cols = (int64_t) w_out - x_prev;
+    cnts_out[m_out++] = (int64_t) h_out * cols - y_out_prev; // run of 0s, already padded
     M->m = m_out;
     rleEliminateZeroRuns(M);
     rleFree(&tmp);
@@ -179,7 +190,7 @@ static void rleWarpAffine1(const RLE *R, RLE *M, siz h_out, double *H) {
 
 
 static void rleWarpAffine2(const RLE *R, RLE *M, siz h_out, double *H) {
-    siz h = R->h;
+    int64_t h = R->h;
     siz w = R->w;
     siz m = R->m;
     siz w_out = w;
@@ -197,9 +208,9 @@ static void rleWarpAffine2(const RLE *R, RLE *M, siz h_out, double *H) {
     uint *cnts = R->cnts;
     uint *cnts_out = rleInit(M, h_out, w_out, m);
     siz m_out = 0;
-    int r = 0;
-    int y_out_prev = h_out;
-    int x_prev = -1;
+    int64_t r = 0;
+    int64_t y_out_prev = h_out;
+    int64_t x_prev = -1;
 
 
     double A1_x_p_A3;
@@ -210,35 +221,32 @@ static void rleWarpAffine2(const RLE *R, RLE *M, siz h_out, double *H) {
 
     for (siz i = 1; i < m; i += 2) {
         r += cnts[i-1];
-        int cnt = cnts[i];
-        int last = r + cnt - 1;
-        int x = r / h;
+        int64_t cnt = cnts[i];
+        int64_t last = r + cnt - 1;
+        int64_t x = r / h;
 
         if (x != x_prev) {
             A1_x_p_A3 = x * A1 + A3;
         }
 
-        int y_start = r % h;
-        int y_end = last % h + 1;
+        int64_t y_start = r % h;
+        int64_t y_end = last % h + 1;
 
         double raw_y_start_out = A2 * y_start + A1_x_p_A3;
         double raw_y_end_out = A2 * y_end + A1_x_p_A3;
 
-        int y_start_out = intClip((int) round(raw_y_start_out), 0, h_out);
-        int y_end_out = intClip((int) round(raw_y_end_out), 0, h_out);
-
-        //int y_start_out = intClip((int) round(_transformX(x, y_start, a)), 0, h_out);
-        //int y_end_out = intClip((int) round(_transformX(x, y_end, a)), 0, h_out);
+        int64_t y_start_out = int64Clip((int64_t) round(raw_y_start_out), 0, h_out);
+        int64_t y_end_out = int64Clip((int64_t) round(raw_y_end_out), 0, h_out);
 
         if (y_start_out > y_end_out) {
-            int tmp = y_start_out;
+            int64_t tmp = y_start_out;
             y_start_out = y_end_out;
             y_end_out = tmp;
         }
 
-        int cols = x - x_prev;
-        int num_zeros = h_out * cols + y_start_out - (int) y_out_prev;
-        int num_ones = y_end_out - y_start_out;
+        int64_t cols = x - x_prev;
+        int64_t num_zeros = (int64_t) h_out * cols + y_start_out - y_out_prev;
+        int64_t num_ones = y_end_out - y_start_out;
 
         if (num_zeros < 0) {
             // we are supposed to go backwards to start the new run...
@@ -262,8 +270,8 @@ static void rleWarpAffine2(const RLE *R, RLE *M, siz h_out, double *H) {
         r += cnt;
     }
 
-    int cols = w_out - x_prev;
-    cnts_out[m_out++] = h_out * cols - y_out_prev; // run of 0s
+    int64_t cols = (int64_t) w_out - x_prev;
+    cnts_out[m_out++] = (int64_t) h_out * cols - y_out_prev; // run of 0s
     M->m = m_out;
     rleEliminateZeroRuns(M);
 }

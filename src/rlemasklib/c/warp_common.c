@@ -1,5 +1,7 @@
 #include <stdbool.h>
+#include <string.h> // for memset
 #include "basics.h"
+#include "minmax.h"
 #include "transpose_flip.h"
 #include "warp_common.h"
 
@@ -64,7 +66,9 @@ static void rleBackFlipRot(RLE *tmp, RLE *M, int k, bool flip) {
         case 1:
             if (flip) {
                 rleRotate180Inplace(tmp);
-                rleMoveTo(tmp, M);
+                // plain struct move: M is uninitialized here, so rleMoveTo's rleFree(M) must be avoided
+                *M = *tmp;
+                memset(tmp, 0, sizeof(RLE));
             } else {
                 rleVerticalFlip(tmp, M);
             }
@@ -82,7 +86,9 @@ static void rleBackFlipRot(RLE *tmp, RLE *M, int k, bool flip) {
             break;
         case 3:
             if (flip) {
-                rleMoveTo(tmp, M);
+                // plain struct move: M is uninitialized here, so rleMoveTo's rleFree(M) must be avoided
+                *M = *tmp;
+                memset(tmp, 0, sizeof(RLE));
             } else {
                 rleVerticalFlip(tmp, M);
                 rleRotate180Inplace(M);
@@ -97,4 +103,8 @@ static void rleBackFlipRot(RLE *tmp, RLE *M, int k, bool flip) {
 
 static int int_remainder(int a, int b) {
     return (a % b + b) % b;
+}
+
+static int64_t int64Clip(int64_t x, int64_t min_, int64_t max_) {
+    return RLEMASKLIB_CLIP(x, min_, max_);
 }

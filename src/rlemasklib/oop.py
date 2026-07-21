@@ -1174,7 +1174,10 @@ class RLEMask:
         See Also:
             :meth:`warp_perspective`, :meth:`warp_distorted`
         """
-
+        M = np.asarray(M, dtype=np.float64)
+        if M.shape not in ((2, 3), (3, 3)):
+            raise ValueError(f"The affine matrix must have shape 2x3 or 3x3, got {M.shape}")
+        _validate_transform_matrix(M)
         return RLEMask._init(
             self.cy._r_warp_affine(M, output_imshape[0], output_imshape[1])
         )
@@ -1212,6 +1215,10 @@ class RLEMask:
         See Also:
             :meth:`warp_affine`, :meth:`warp_distorted`
         """
+        H = np.asarray(H, dtype=np.float64)
+        if H.shape != (3, 3):
+            raise ValueError(f"The homography matrix must have shape 3x3, got {H.shape}")
+        _validate_transform_matrix(H)
         return RLEMask._init(
             self.cy._r_warp_perspective(H, output_imshape[0], output_imshape[1])
         )
@@ -1233,6 +1240,13 @@ class RLEMask:
         This function supports OpenCV-like lens distortion parameters. API design and documentation
         is subject to change.
         """
+        for name, K, R, d in (("first", K1, R1, d1), ("second", K2, R2, d2)):
+            K = np.asarray(K)
+            if not (np.all(np.isfinite(K)) and np.all(np.isfinite(np.asarray(R)))
+                    and np.all(np.isfinite(np.asarray(d)))):
+                raise ValueError(f"The {name} camera's parameters must all be finite")
+            if K[0, 0] == 0 or K[1, 1] == 0:
+                raise ValueError(f"The {name} camera's focal lengths must be nonzero")
         return RLEMask._init(
             self.cy._r_warp_distorted(
                 R1,
@@ -3264,6 +3278,19 @@ def _get_imshape(imshape=None, imsize=None):
             f"Image dimensions {h}x{w} exceed maximum supported size "
             f"(h*w must fit in uint32, got {h * w})")
     return [h, w]
+
+
+def _validate_transform_matrix(M):
+    if not np.all(np.isfinite(M)):
+        raise ValueError("The transformation matrix must contain only finite values")
+    H = np.eye(3)
+    H[: M.shape[0]] = M
+    try:
+        inv = np.linalg.inv(H)
+    except np.linalg.LinAlgError:
+        raise ValueError("The transformation matrix must be invertible") from None
+    if not np.all(np.isfinite(inv)):
+        raise ValueError("The transformation matrix must be invertible")
 
 
 def _forward_slice(slice_obj, length):

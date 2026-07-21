@@ -13,5 +13,7 @@ static void transpose_3x3(const double A[9], double A_T[9]);
 // Similar to modulo but works for negative a the way it works in Python
 static int int_remainder(int a, int b);
 
+static int64_t int64Clip(int64_t x, int64_t min_, int64_t max_);
+
 // Rotate and flip back an RLE to the original orientation
 static void rleBackFlipRot(RLE *tmp, RLE *M, int k, bool flip);

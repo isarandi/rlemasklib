@@ -164,10 +164,10 @@ cdef extern from "largest_interior_rectangle.h" nogil:
                                                  double aspect_ratio)
 
 cdef extern from "warp_affine.h" nogil:
-    void rleWarpAffine(const RLE *R, RLE *M, siz h_out, siz w_out, double *H)
+    bool rleWarpAffine(const RLE *R, RLE *M, siz h_out, siz w_out, double *H)
 
 cdef extern from "warp_perspective.h" nogil:
-    void rleWarpPerspective(const RLE *R, RLE *M, siz h_out, siz w_out, double *H)
+    bool rleWarpPerspective(const RLE *R, RLE *M, siz h_out, siz w_out, double *H)
 
 cdef extern from "png_to_rle.h" nogil:
     bint rleFromPngBytes(RLE *R, const byte *data, siz length, int threshold, int channel)
@@ -195,7 +195,7 @@ cdef extern from "warp_distorted.h" nogil:
         double d[12]
         ValidRegion valid
 
-    void rleWarpDistorted(
+    bool rleWarpDistorted(
             const RLE *R, RLE *M, siz h_out, siz w_out, Camera *old_camera, Camera *new_camera)
 
 
@@ -204,6 +204,15 @@ ctypedef RLE**RLEPtrPtr
 ctypedef const RLE *ConstRLEPtr
 ctypedef const ConstRLEPtr *ConstRLEPtrConstPtr
 ctypedef const RLEPtr *ConstRLEPtrPtr
+
+
+def _check_shape_domain(h, w):
+    if h < 0 or w < 0:
+        raise ValueError(f"Mask dimensions must be non-negative, got height {h} and width {w}")
+    if int(h) * int(w) > 0xFFFFFFFF:
+        raise ValueError(
+            f"Masks may have at most 2**32 - 1 pixels, got height {h} and width {w} "
+            f"({int(h) * int(w)} pixels)")
 
 
 @cython.boundscheck(False)
@@ -430,15 +439,25 @@ cdef class RLECy:
         return result
 
     def _r_warp_affine(self, M: np.ndarray, h_out, w_out):
+        _check_shape_domain(h_out, w_out)
         cdef RLECy result = RLECy()
         cdef double[::1] M_double = np.ascontiguousarray(M.reshape(-1), dtype=np.float64)
-        rleWarpAffine(&self.r, &result.r, h_out, w_out, &M_double[0])
+        if M_double.shape[0] < 6:
+            raise ValueError(
+                f"Affine matrix must have at least 6 elements, got {M_double.shape[0]}")
+        if not rleWarpAffine(&self.r, &result.r, h_out, w_out, &M_double[0]):
+            raise ValueError("Degenerate affine transformation matrix")
         return result
 
     def _r_warp_perspective(self, H: np.ndarray, h_out, w_out):
+        _check_shape_domain(h_out, w_out)
         cdef RLECy result = RLECy()
         cdef double[::1] H_double = np.ascontiguousarray(H.reshape(-1), dtype=np.float64)
-        rleWarpPerspective(&self.r, &result.r, h_out, w_out, &H_double[0])
+        if H_double.shape[0] < 9:
+            raise ValueError(
+                f"Perspective matrix must have at least 9 elements, got {H_double.shape[0]}")
+        if not rleWarpPerspective(&self.r, &result.r, h_out, w_out, &H_double[0]):
+            raise ValueError("Degenerate perspective transformation matrix")
         return result
 
     def _r_contours(self):
@@ -506,8 +525,10 @@ cdef class RLECy:
         cdef Camera new_cam = RLECy._make_camera(
             R2, K2, d2, ru2_buf, tu2_buf, rd2_buf, td2_buf)
 
+        _check_shape_domain(h_out, w_out)
         cdef RLECy result = RLECy()
-        rleWarpDistorted(&self.r, &result.r, h_out, w_out, &old_cam, &new_cam)
+        if not rleWarpDistorted(&self.r, &result.r, h_out, w_out, &old_cam, &new_cam):
+            raise ValueError("Degenerate camera transformation")
         return result
 
     def _r_avg_pool2x2(self):

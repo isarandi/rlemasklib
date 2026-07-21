@@ -33,17 +33,17 @@ static void _transformDistorted(const double inp[2], double outp[2], struct Came
 static void _matmul_A_BT_3x3(const double A[9], const double B[9], double C[9]);
 //----------------------------------------------------------
 
-void rleWarpDistorted(
+bool rleWarpDistorted(
     const RLE *R, RLE *M, siz h_out, siz w_out, struct Camera* old_camera,
     struct Camera* new_camera) {
 
     if (h_out == 0 || w_out == 0) {
         rleInit(M, h_out, w_out, 0);
-        return;
+        return true;
     }
     if (R->m == 0 || R->h == 0 || R->w == 0) {
         rleZeros(M, h_out, w_out);
-        return;
+        return true;
     }
 
     struct CameraChange cc;
@@ -75,8 +75,9 @@ void rleWarpDistorted(
     prepareCameraChange(old_camera, &new_camera_rot, &cc);
 
 
+    // reference point is the output-center y in the k-rotated frame (h_out/w_out already swapped for odd k)
     double pp_y_y = _transformDistortedY(pp_old[0], pp_old[1] + 1, &cc);
-    bool flip = pp_y_y < pp[1];
+    bool flip = pp_y_y < (h_out - 1) * 0.5;
     if (flip) {
         // vertical flip (Y)
         cc.H[3] *= -1;
@@ -98,11 +99,10 @@ void rleWarpDistorted(
     RLE tmp3;
     rleWarpDistorted2(&tmp2, &tmp3, w_out, &cc);
     rleFree(&tmp2);
-    //rleMoveTo(&tmp3, M);
-    //rleFree(&tmp3);
 
     rleBackFlipRot(&tmp3, M, k, flip);
     rleFree(&tmp3);
+    return true;
 }
 
 
@@ -120,36 +120,38 @@ static void rleWarpDistorted1(const RLE *R, RLE *M, siz h_out, struct CameraChan
     rleZeroPad(R, &tmp, 1, (uint[4]){0, 0, 0, 1});
 
     siz m = tmp.m;
-    siz h = tmp.h;
+    int64_t h = tmp.h;
     siz w_out = tmp.w + 1;
     uint *cnts = tmp.cnts;
 
     uint *cnts_out = rleInit(M, h_out, w_out, m);
     siz m_out = 0;
-    int r = 0;
-    int y_out_prev = h_out;
-    int x_prev = -1;
+    // int64_t (not siz): absolute pixel positions may exceed 2^31, while
+    // x_prev = -1 and negative num_zeros are meaningful, so unsigned won't do
+    int64_t r = 0;
+    int64_t y_out_prev = h_out;
+    int64_t x_prev = -1;
 
     for (siz i = 1; i < m; i += 2) {
         r += cnts[i-1];
-        int cnt = cnts[i];
-        int last = r + cnt - 1;
-        int x = r / h;
-        int y_start = r % h;
-        int y_end = last % h + 1;
+        int64_t cnt = cnts[i];
+        int64_t last = r + cnt - 1;
+        int64_t x = r / h;
+        int64_t y_start = r % h;
+        int64_t y_end = last % h + 1;
 
-        int y_start_out = intClip((int) round(_transformDistortedY(x, y_start, cc)), 0, h_out);
-        int y_end_out = intClip((int) round(_transformDistortedY(x, y_end, cc)), 0, h_out);
+        int64_t y_start_out = int64Clip((int64_t) round(_transformDistortedY(x, y_start, cc)), 0, h_out);
+        int64_t y_end_out = int64Clip((int64_t) round(_transformDistortedY(x, y_end, cc)), 0, h_out);
 
         if (y_start_out > y_end_out) {
-            int tmp = y_start_out;
+            int64_t tmp = y_start_out;
             y_start_out = y_end_out;
             y_end_out = tmp;
         }
 
-        int cols = x - x_prev;
-        int num_zeros = h_out * cols + y_start_out - (int) y_out_prev;
-        int num_ones = y_end_out - y_start_out;
+        int64_t cols = x - x_prev;
+        int64_t num_zeros = (int64_t) h_out * cols + y_start_out - y_out_prev;
+        int64_t num_ones = y_end_out - y_start_out;
 
         if (num_zeros < 0) {
             // we are supposed to go backwards to start the new run...
@@ -173,15 +175,15 @@ static void rleWarpDistorted1(const RLE *R, RLE *M, siz h_out, struct CameraChan
         r += cnt;
     }
 
-    int cols = w_out - x_prev;
-    cnts_out[m_out++] = h_out * cols - y_out_prev; // run of 0s, already padded
+    int64_t cols = (int64_t) w_out - x_prev;
+    cnts_out[m_out++] = (int64_t) h_out * cols - y_out_prev; // run of 0s, already padded
     M->m = m_out;
     rleEliminateZeroRuns(M);
     rleFree(&tmp);
 }
 
 static void rleWarpDistorted2(const RLE *R, RLE *M, siz h_out, struct CameraChange *cc) {
-    siz h = R->h;
+    int64_t h = R->h;
     siz w = R->w;
     siz m = R->m;
     siz w_out = w;
@@ -198,30 +200,30 @@ static void rleWarpDistorted2(const RLE *R, RLE *M, siz h_out, struct CameraChan
     uint *cnts = R->cnts;
     uint *cnts_out = rleInit(M, h_out, w_out, m);
     siz m_out = 0;
-    int r = 0;
-    int y_out_prev = h_out;
-    int x_prev = -1;
+    int64_t r = 0;
+    int64_t y_out_prev = h_out;
+    int64_t x_prev = -1;
 
     for (siz i = 1; i < m; i += 2) {
         r += cnts[i-1];
-        int cnt = cnts[i];
-        int last = r + cnt - 1;
-        int x = r / h;
-        int y_start = r % h;
-        int y_end = last % h + 1;
+        int64_t cnt = cnts[i];
+        int64_t last = r + cnt - 1;
+        int64_t x = r / h;
+        int64_t y_start = r % h;
+        int64_t y_end = last % h + 1;
 
-        int y_start_out = intClip((int) round(_transformDistortedX(x, y_start, cc)), 0, h_out);
-        int y_end_out = intClip((int) round(_transformDistortedX(x, y_end, cc)), 0, h_out);
+        int64_t y_start_out = int64Clip((int64_t) round(_transformDistortedX(x, y_start, cc)), 0, h_out);
+        int64_t y_end_out = int64Clip((int64_t) round(_transformDistortedX(x, y_end, cc)), 0, h_out);
 
         if (y_start_out > y_end_out) {
-            int tmp = y_start_out;
+            int64_t tmp = y_start_out;
             y_start_out = y_end_out;
             y_end_out = tmp;
         }
 
-        int cols = x - x_prev;
-        int num_zeros = h_out * cols + y_start_out - (int) y_out_prev;
-        int num_ones = y_end_out - y_start_out;
+        int64_t cols = x - x_prev;
+        int64_t num_zeros = (int64_t) h_out * cols + y_start_out - y_out_prev;
+        int64_t num_ones = y_end_out - y_start_out;
 
         if (num_zeros < 0) {
             // we are supposed to go backwards to start the new run...
@@ -245,8 +247,8 @@ static void rleWarpDistorted2(const RLE *R, RLE *M, siz h_out, struct CameraChan
         r += cnt;
     }
 
-    int cols = w_out - x_prev;
-    cnts_out[m_out++] = h_out * cols - y_out_prev; // run of 0s
+    int64_t cols = (int64_t) w_out - x_prev;
+    cnts_out[m_out++] = (int64_t) h_out * cols - y_out_prev; // run of 0s
     M->m = m_out;
     rleEliminateZeroRuns(M);
 }
@@ -540,8 +542,8 @@ static void rotateCameraParams(
     const struct Camera *c1, struct Camera *c2, siz h, siz w, int k) {
     *c2 = *c1;  // copy all fields first (initializes s, valid, etc.)
 
-    double ox = (w - 1) / 2;
-    double oy = (h - 1) / 2;
+    double ox = (w - 1) / 2.0;
+    double oy = (h - 1) / 2.0;
     double cx = c1->c[0];
     double cy = c1->c[1];
     double fx = c1->f[0];
@@ -555,8 +557,10 @@ static void rotateCameraParams(
             c2->f[0] = fy;
             c2->f[1] = fx;
 
-            c2->c[0] = -cy + oy + ox;
-            c2->c[1] = cx - ox + oy;
+            // rotation about anchor (oy, oy), matching rotate_affine/rotate_homography:
+            // pixel map (u, v) -> (2*oy - v, u)
+            c2->c[0] = 2 * oy - cy;
+            c2->c[1] = cx;
 
             c2->R[0] = -c1->R[3];
             c2->R[1] = -c1->R[4];
@@ -599,8 +603,10 @@ static void rotateCameraParams(
             c2->f[0] = fy;
             c2->f[1] = fx;
 
-            c2->c[0] = cy - oy + ox;
-            c2->c[1] = -cx + ox + oy;
+            // rotation about anchor (ox, ox), matching rotate_affine/rotate_homography:
+            // pixel map (u, v) -> (v, 2*ox - u)
+            c2->c[0] = cy;
+            c2->c[1] = 2 * ox - cx;
 
             c2->R[0] = c1->R[3];
             c2->R[1] = c1->R[4];

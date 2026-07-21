@@ -34,6 +34,7 @@ struct CameraChange {
     struct ValidRegion valid2; // valid region of new camera
 };
 
-void rleWarpDistorted(
+// Returns false if the transform is degenerate (output is then an all-zeros mask).
+bool rleWarpDistorted(
     const RLE *R, RLE *M, siz h_out, siz w_out, struct Camera* old_camera,
     struct Camera* new_camera);
