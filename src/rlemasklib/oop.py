@@ -1493,6 +1493,16 @@ class RLEMask:
             raise ValueError("Kernel size must be odd")
 
         radius = kernel_size // 2
+
+        # Fast path: the square and cross kernels are separable, so for larger kernels a
+        # transpose + O(runs) vertical-dilation pass beats the O(kernel_size * runs) shift-and-OR
+        # loop below. The crossover is around kernel_size 7 (measured); smaller kernels stay on
+        # the shift path, whose per-shift cost is negligible.
+        if kernel_size >= 7 and kernel_shape == "square":
+            return self._dilate_box_separable(radius, inplace)
+        if kernel_size >= 7 and kernel_shape == "cross":
+            return self._dilate_cross_separable(radius, inplace)
+
         x = np.arange(-radius, 1)
         if kernel_shape == "circle":
             heights = np.sqrt((kernel_size / 2) ** 2 - x**2).astype(np.uint32)
@@ -1523,6 +1533,39 @@ class RLEMask:
             self.cy = merged.cy
             return self
         return merged
+
+    def _dilate_box_separable(self, radius: int, inplace: bool) -> "RLEMask":
+        """Square (box) dilation as separable vertical then horizontal passes.
+
+        A box dilation is the Minkowski sum of a vertical and a horizontal segment. The vertical
+        pass is the O(runs) vertical-dilation primitive; the horizontal pass is the same primitive
+        applied to the transpose. Total cost is O(runs + height + width), independent of the kernel
+        size, versus O(kernel_size * runs) for the shift-and-OR path.
+        """
+        vertical = self.dilate_vertical(radius, radius)
+        transposed = vertical.transpose()
+        transposed.dilate_vertical(radius, radius, inplace=True)
+        result = transposed.transpose()
+        if inplace:
+            self.cy = result.cy
+            return self
+        return result
+
+    def _dilate_cross_separable(self, radius: int, inplace: bool) -> "RLEMask":
+        """Cross (plus-shaped) dilation as the union of a vertical and a horizontal arm.
+
+        Each arm is the O(runs) vertical-dilation primitive (the horizontal arm via the transpose),
+        combined with a single OR. Cost is O(runs + height + width), independent of the kernel size.
+        """
+        vertical_arm = self.dilate_vertical(radius, radius)
+        transposed = self.transpose()
+        transposed.dilate_vertical(radius, radius, inplace=True)
+        horizontal_arm = transposed.transpose()
+        result = vertical_arm | horizontal_arm
+        if inplace:
+            self.cy = result.cy
+            return self
+        return result
 
     def erode(self, kernel_shape="circle", kernel_size=7, inplace=False) -> "RLEMask":
         """Erode a mask with a kernel of a given shape and size.
