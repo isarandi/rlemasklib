@@ -80,25 +80,37 @@ static siz _rleCntsSum(const RLE *R) {
     return s;
 }
 
-static void _rleCheckSumsEqual(siz sum_first, siz sum_other) {
+// Returns false (and records a deferred error) when the sums differ, so callers can emit an
+// empty result and let the Cython layer raise a catchable ValueError. Reaching this from
+// well-formed masks is impossible: canonical same-shape masks all sum to h*w, and the Python
+// layer rejects shape mismatches. It only fires on RLEs made invalid through the explicitly
+// unsafe APIs (from_counts(validate_sum=False), the shape setter, mutating counts_view).
+static bool _rleCheckSumsEqual(siz sum_first, siz sum_other) {
     if (sum_first != sum_other) {
-        fprintf(stderr, "rlemasklib: cannot merge RLEs whose run-length sums differ\n");
-        abort();
+        rleSetError("cannot merge RLEs whose run-length sums differ");
+        return false;
     }
+    return true;
 }
 
-static void _rleCheckMergeSumsPtr(const RLE **R, siz n) {
+static bool _rleCheckMergeSumsPtr(const RLE **R, siz n) {
     siz s0 = _rleCntsSum(R[0]);
     for (siz i = 1; i < n; i++) {
-        _rleCheckSumsEqual(s0, _rleCntsSum(R[i]));
+        if (!_rleCheckSumsEqual(s0, _rleCntsSum(R[i]))) {
+            return false;
+        }
     }
+    return true;
 }
 
-static void _rleCheckMergeSumsArr(const RLE *R, siz n) {
+static bool _rleCheckMergeSumsArr(const RLE *R, siz n) {
     siz s0 = _rleCntsSum(&R[0]);
     for (siz i = 1; i < n; i++) {
-        _rleCheckSumsEqual(s0, _rleCntsSum(&R[i]));
+        if (!_rleCheckSumsEqual(s0, _rleCntsSum(&R[i]))) {
+            return false;
+        }
     }
+    return true;
 }
 
 // Constant fill with the boolean function's value on all-background input, used when a
@@ -175,7 +187,10 @@ void rleMerge2(const RLE *A, const RLE *B, RLE *M, uint boolfunc) {
         return;
     }
 
-    _rleCheckSumsEqual(_rleCntsSum(A), _rleCntsSum(B));
+    if (!_rleCheckSumsEqual(_rleCntsSum(A), _rleCntsSum(B))) {
+        rleInit(M, h, w, 0);
+        return;
+    }
 
     // maximum number of runs is min(h*w+1, sum(m)) (e.g., odd-height checkerboard starting with 1),
     // plus 1 for the zero-length background run prepended when boolfunc is true on all-background
@@ -270,7 +285,10 @@ void rleMergeMultiFunc(const RLE **R, RLE *M, siz n, uint* boolfuncs) {
         }
     }
 
-    _rleCheckMergeSumsPtr(R, n);
+    if (!_rleCheckMergeSumsPtr(R, n)) {
+        rleInit(M, h, w, 0);
+        return;
+    }
 
     RLE tmp;
     // maximum number of runs is min(h*w+1, sum(m)) (e.g., odd-height checkerboard starting with 1),
@@ -387,7 +405,10 @@ void rleMergePtr(const RLE **R, RLE *M, siz n, uint boolfunc) {
         }
     }
 
-    _rleCheckMergeSumsPtr(R, n);
+    if (!_rleCheckMergeSumsPtr(R, n)) {
+        rleInit(M, h, w, 0);
+        return;
+    }
 
     RLE tmp;
     // maximum number of runs is min(h*w+1, sum(m)) (e.g., odd-height checkerboard starting with 1),
@@ -503,7 +524,10 @@ void rleMerge(const RLE *R, RLE *M, siz n, uint boolfunc) {
         }
     }
 
-    _rleCheckMergeSumsArr(R, n);
+    if (!_rleCheckMergeSumsArr(R, n)) {
+        rleInit(M, h, w, 0);
+        return;
+    }
 
     RLE tmp;
     // maximum number of runs is min(h*w+1, sum(m)) (e.g., odd-height checkerboard starting with 1),
@@ -621,7 +645,10 @@ static void _rleMergeCustom(
         }
     }
 
-    _rleCheckMergeSumsPtr(R, n);
+    if (!_rleCheckMergeSumsPtr(R, n)) {
+        rleInit(M, h, w, 0);
+        return;
+    }
 
     // maximum number of runs is min(h*w+1, sum(m)) (e.g., odd-height checkerboard starting with 1),
     // plus 1 for the zero-length background run prepended when the function is true on all-background
@@ -717,7 +744,10 @@ void rleMergeWeightedAtLeast2(
         }
     }
 
-    _rleCheckMergeSumsPtr(R, n);
+    if (!_rleCheckMergeSumsPtr(R, n)) {
+        rleInit(M, h, w, 0);
+        return;
+    }
 
     // maximum number of runs is min(h*w+1, sum(m)) (e.g., odd-height checkerboard starting with 1),
     // plus 1 for the zero-length background run prepended when the function is true on all-background
@@ -822,7 +852,10 @@ void rleMergeAtLeast2(const RLE **R, RLE *M, siz n, uint k) {
         }
     }
 
-    _rleCheckMergeSumsPtr(R, n);
+    if (!_rleCheckMergeSumsPtr(R, n)) {
+        rleInit(M, h, w, 0);
+        return;
+    }
 
     // maximum number of runs is min(h*w+1, sum(m)) (e.g., odd-height checkerboard starting with 1),
     // plus 1 for the zero-length background run prepended when the function is true on all-background

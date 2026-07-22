@@ -48,6 +48,7 @@ cdef extern from "basics.h" nogil:
     uint *rleFrCnts(RLE *R, siz h, siz w, siz m, uint *cnts)
     void rleBorrow(RLE *R, siz h, siz w, siz m, uint *cnts)
     void rleEliminateZeroRuns(RLE *R)
+    bool rleTakeError(const char **msg_out)
 
 cdef extern from "encode_decode.h" nogil:
     void rleEncode(RLE *R, const byte *M, siz h, siz w, siz n)
@@ -63,6 +64,13 @@ cdef extern from "boolfuncs.h" nogil:
 cdef extern from "moments.h" nogil:
     void rleArea(const RLE *R, siz n, uint *a)
     void rleCentroid(const RLE *R, double *xys, siz n)
+
+
+cdef _raise_if_rle_error():
+    cdef const char *msg = NULL
+    if rleTakeError(&msg):
+        raise ValueError(
+            (<bytes> msg).decode('utf-8') if msg != NULL else "invalid RLE operation")
 
 cdef extern from "pad_crop.h" nogil:
     void rleCrop(const RLE *R_in, RLE *R_out, siz n, const uint *bbox)
@@ -299,6 +307,7 @@ def merge(rleObjs, boolfunc=14):
             raise ValueError('All RLEs must have the same size to be merged')
     cdef RLEs R = RLEs(1)
     rleMerge(<RLE *> Rs._R, <RLE *> R._R, <siz> Rs._n, boolfunc & 0xffff)
+    _raise_if_rle_error()
     return _to_leb128_dicts(R)[0]
 
 def area(rleObjs):
@@ -346,6 +355,7 @@ def iouMulti(rleObjs):
 
     cdef uint intersection_area
     rleMerge(Rs._R, Rs_merged._R, Rs._n, _INTERSECTION)
+    _raise_if_rle_error()
     rleArea(Rs_merged._R, 1, &intersection_area)
 
     if intersection_area == 0:

@@ -42,6 +42,7 @@ cdef extern from "basics.h" nogil:
     uint *rleInit(RLE *R, siz h, siz w, siz m)
     uint *rleFrCnts(RLE *R, siz h, siz w, siz m, uint *cnts)
     void rleEliminateZeroRuns(RLE *R)
+    bool rleTakeError(const char **msg_out)
     void rleBorrow(RLE *R, siz h, siz w, siz m, uint *cnts)
     void rleCopy(const RLE *R, RLE *M)
     void rleMoveTo(RLE *R, RLE *M)
@@ -242,6 +243,15 @@ def _check_shape_domain(h, w):
         raise ValueError(
             f"Masks may have at most 2**32 - 1 pixels, got height {h} and width {w} "
             f"({int(h) * int(w)} pixels)")
+
+
+cdef _raise_if_rle_error():
+    # Turn a deferred C-layer merge error (e.g. inputs with mismatched run-length sums,
+    # reachable only via the explicitly unsafe APIs) into a catchable Python exception.
+    cdef const char *msg = NULL
+    if rleTakeError(&msg):
+        raise ValueError(
+            (<bytes> msg).decode('utf-8') if msg != NULL else "invalid RLE operation")
 
 
 @cython.boundscheck(False)
@@ -507,6 +517,7 @@ cdef class RLECy:
     def _r_diffor(self, other1: RLECy, other2: RLECy):
         cdef RLECy result = RLECy()
         rleMergeDiffOr(&self.r, &other1.r, &other2.r, &result.r)
+        _raise_if_rle_error()
         return result
 
     def _r_warp_affine(self, M: np.ndarray, h_out, w_out):
@@ -657,6 +668,7 @@ cdef class RLECy:
                 bfs_ptr = &bfs[0]
             result = RLECy()
             rleMergeMultiFunc(rles_ptr, &result.r, n, bfs_ptr)
+            _raise_if_rle_error()
             return result
         finally:
             free(rles_ptr)
@@ -678,6 +690,7 @@ cdef class RLECy:
 
             result = RLECy()
             rleMergePtr(rles_ptr, &result.r, n, boolfunc)
+            _raise_if_rle_error()
             return result
         finally:
             free(rles_ptr)
@@ -706,6 +719,7 @@ cdef class RLECy:
                 raise ValueError("The truth table must not be empty")
             result = RLECy()
             rleMergeLookup(rles_ptr, &result.r, len(rles), &mbf[0], mbf.shape[0])
+            _raise_if_rle_error()
             return result
         finally:
             free(rles_ptr)
@@ -732,6 +746,7 @@ cdef class RLECy:
             result = RLECy()
             rleMergeWeightedAtLeast2(rles_ptr, &result.r, len(rles), &weights_double[0],
                                      threshold)
+            _raise_if_rle_error()
             return result
         finally:
             free(rles_ptr)
@@ -752,6 +767,7 @@ cdef class RLECy:
 
             result = RLECy()
             rleMergeAtLeast2(rles_ptr, &result.r, len(rles), threshold)
+            _raise_if_rle_error()
             return result
         finally:
             free(rles_ptr)
@@ -893,6 +909,7 @@ cdef class RLECy:
     def _r_boolfunc(self, other: RLECy, boolfunc: int):
         cdef RLECy result = RLECy()
         rleMerge2(&self.r, &other.r, &result.r, boolfunc & 0xffffffff)
+        _raise_if_rle_error()
         return result
 
     @property

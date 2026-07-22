@@ -61,6 +61,14 @@ uint *rleInit(RLE *R, siz h, siz w, siz m);
 // Init by copying from existing runlength counts
 uint *rleFrCnts(RLE *R, siz h, siz w, siz m, uint *cnts);
 
+// Deferred error reporting for the merge family, which runs under the GIL but cannot raise
+// a Python exception directly. On a recoverable invariant violation (e.g. inputs whose
+// run-length sums differ) the C code records a message here and returns an empty result;
+// the Cython layer calls rleTakeError afterwards to raise a catchable ValueError instead of
+// aborting the process.
+void rleSetError(const char *msg);
+bool rleTakeError(const char **msg_out);
+
 // Initialize a borrowed (non-owning) RLE that wraps existing counts.
 // The RLE does not own the memory and rleFree will not free it.
 // Borrowed RLEs are read-only views and must not be used with in-place operations.

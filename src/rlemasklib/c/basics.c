@@ -217,3 +217,23 @@ void rleEliminateZeroRuns(RLE *R) {
     }
     rleRealloc(R, k + 1);
 }
+
+static bool _rlemasklib_error = false;
+static char _rlemasklib_error_msg[128];
+
+void rleSetError(const char *msg) {
+    _rlemasklib_error = true;
+    strncpy(_rlemasklib_error_msg, msg, sizeof(_rlemasklib_error_msg) - 1);
+    _rlemasklib_error_msg[sizeof(_rlemasklib_error_msg) - 1] = '\0';
+}
+
+bool rleTakeError(const char **msg_out) {
+    if (!_rlemasklib_error) {
+        return false;
+    }
+    _rlemasklib_error = false;
+    if (msg_out) {
+        *msg_out = _rlemasklib_error_msg;
+    }
+    return true;
+}
