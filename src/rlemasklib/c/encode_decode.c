@@ -186,7 +186,9 @@ bool rleDecode(const RLE *R, byte *M, siz n, byte value) {
     // Background pixels are not touched, so M should be pre-initialized for background.
     byte *end = M + R->h * R->w * n;
     for (siz i = 0; i < n; i++) {
-        for (siz j = 0; j < (R[i].m/2)*2; j++) {
+        // Iterate every run (not (m/2)*2): a trailing background run does no memset but
+        // must still advance M, otherwise later masks' planes decode at the wrong offset.
+        for (siz j = 0; j < R[i].m; j++) {
             uint cnt = R[i].cnts[j];
             if (M + cnt > end) {
                 return false;
