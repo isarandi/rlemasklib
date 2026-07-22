@@ -111,13 +111,15 @@ class RLEMask:
 
     @staticmethod
     def from_array(
-        mask_array: np.ndarray, threshold: int = 1, is_sparse: bool = True,
+        mask_array: np.ndarray, threshold: float = 1, is_sparse: bool = True,
         thresh128: bool = False
     ) -> "RLEMask":
         """Create an RLEMask object from a dense mask.
 
-        Pixels with values >= ``threshold`` become foreground (1), others background (0).
-        Default threshold is 1, so any nonzero pixel is foreground.
+        Pixels with values >= ``threshold`` become foreground (1), others background (0),
+        comparing in the array's own dtype. The default threshold is 1, so for integer input
+        any nonzero value is foreground; note this means a float probability map is thresholded
+        at 1 by default (e.g. 0.5 becomes background) -- pass ``threshold=0.5`` for such inputs.
 
         If `mask_array` is C contiguous, a transpose has to take place since the internal RLE
         format encodes the mask in Fortran order. If `is_sparse` is set to True, the transpose,
@@ -2949,6 +2951,12 @@ class RLEMask:
             raise ValueError(
                 "Masks must have the same height to be concatenated horizontally"
             )
+        h_out = cys[0].shape[0]
+        w_out = sum(cy.shape[1] for cy in cys)
+        if h_out * w_out > 0xFFFFFFFF:
+            raise ValueError(
+                f"Concatenated mask size ({h_out} x {w_out}) exceeds the supported maximum "
+                f"of 2**32 - 1 pixels")
 
         return RLEMask._init(RLECy.concat_horizontal(cys))
 
@@ -2987,6 +2995,12 @@ class RLEMask:
             raise ValueError(
                 "Masks must have the same width to be concatenated vertically"
             )
+        h_out = sum(cy.shape[0] for cy in cys)
+        w_out = cys[0].shape[1]
+        if h_out * w_out > 0xFFFFFFFF:
+            raise ValueError(
+                f"Concatenated mask size ({h_out} x {w_out}) exceeds the supported maximum "
+                f"of 2**32 - 1 pixels")
 
         return RLEMask._init(RLECy.concat_vertical(cys))
 

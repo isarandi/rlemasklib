@@ -317,33 +317,39 @@ cdef class RLECy:
         else:
             rleInit(&self.r, shape[0], shape[1], 0)
 
-    def _i_from_array(self, mask: np.ndarray, int threshold=1, is_sparse: bool = True):
+    def _i_from_array(self, mask: np.ndarray, threshold=1, is_sparse: bool = True):
         cdef byte[::1, :] data
+        cdef int c_threshold
         arr = np.asanyarray(mask)
         _check_shape_domain(arr.shape[0], arr.shape[1])
         if arr.size > 0:
             if arr.dtype == np.bool_:
                 arr = arr.view(np.uint8)
             if arr.dtype == np.uint8:
-                if not 1 <= threshold <= 255:
+                # The C encoder compares a uint8 pixel against a byte threshold, so require an
+                # integer-valued threshold in [1, 255]; otherwise the mask would be trivially
+                # constant, which is a caller bug rather than a meaningful threshold.
+                if threshold != int(threshold) or not 1 <= int(threshold) <= 255:
                     raise ValueError(
-                        f"threshold must be in [1, 255] for uint8 or bool input, "
+                        f"threshold must be an integer in [1, 255] for uint8 or bool input, "
                         f"got {threshold}")
+                c_threshold = int(threshold)
             else:
                 # non-uint8 input is thresholded in its native dtype (foreground is
-                # value >= threshold); the resulting 0/1 array needs only the nonzero test
+                # value >= threshold, so a float threshold is honored); the resulting 0/1
+                # array then needs only the nonzero test
                 arr = np.asfortranarray(arr >= threshold, dtype=np.uint8)
-                threshold = 1
+                c_threshold = 1
 
             if is_sparse and arr.flags.c_contiguous:
                 # It's typically cheaper to do the transpose already in RLE
                 data = arr.T
                 tmp = RLECy()
-                rleEncodeThreshold(&tmp.r, &data[0][0], mask.shape[1], mask.shape[0], 1, threshold)
+                rleEncodeThreshold(&tmp.r, &data[0][0], mask.shape[1], mask.shape[0], 1, c_threshold)
                 rleTranspose(&tmp.r, &self.r)
             else:
                 data = np.asfortranarray(arr, dtype=np.uint8)
-                rleEncodeThreshold(&self.r, &data[0][0], mask.shape[0], mask.shape[1], 1, threshold)
+                rleEncodeThreshold(&self.r, &data[0][0], mask.shape[0], mask.shape[1], 1, c_threshold)
         else:
             rleInit(&self.r, mask.shape[0], mask.shape[1], 0)
 
