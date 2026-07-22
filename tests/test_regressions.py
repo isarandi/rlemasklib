@@ -527,3 +527,228 @@ class TestMiscValidation:
             RLEMask.from_png(data=png_rgb, channel=-1)
         assert RLEMask.from_png(data=png_rgb, channel=0).area() == 20
         assert RLEMask.from_png(data=png_rgb, channel=1).area() == 0
+
+
+class TestNonCanonicalConstruction:
+    """Constructors must normalize interior zero-length runs (which violate the canonical-form
+    invariant that run-walking algorithms rely on) instead of storing them and later crashing
+    or hanging."""
+
+    def test_from_counts_interior_zeros_transpose(self):
+        m = RLEMask.from_counts([1, 0, 0, 0, 0, 5], (3, 2))
+        assert m == RLEMask.from_counts([1, 5], (3, 2))
+        t = m.T  # previously a heap-buffer overflow (SIGABRT)
+        assert np.array_equal(np.array(t), np.array(m).T)
+
+    def test_from_dict_coco_string_interior_zeros(self):
+        d = RLEMask.from_counts([1, 0, 0, 0, 0, 5], (3, 2)).to_dict()
+        m = RLEMask.from_dict(d)
+        assert np.array_equal(np.array(m.rot90(1)), np.rot90(np.array(m), 1))
+
+    def test_from_dict_ucounts_interior_zeros_contours(self):
+        # a non-canonical mask used to make contours()/perimeter() hang forever
+        d = {'size': [6, 6], 'ucounts': [0, 0, 0, 3, 0, 3, 0, 0, 0, 4, 0, 0,
+                                         4, 3, 2, 4, 2, 0, 0, 2, 4, 3, 0, 1, 0, 1]}
+        m = RLEMask.from_dict(d)
+        c = m.contours()
+        assert c.area() >= 0
+        assert m.counts.tolist() == [x for x in m.counts.tolist() if True]  # canonical
+        assert (m.counts[1:] > 0).all()  # no interior/trailing zero runs
+
+    def test_functional_paths_canonicalize(self):
+        d = {'size': [3, 2], 'ucounts': [1, 0, 0, 0, 0, 5]}
+        # functional merge over a non-canonical dict must not crash
+        out = rlemasklib.union([d, rlemasklib.zeros((3, 2))])
+        assert rlemasklib.area(out) == 5
+
+
+class TestMultiMaskDecodeAlignment:
+    """decode([...]) of several masks must align every plane, including odd-m masks whose last
+    pixel is background."""
+
+    def test_decode_multi_mask_odd_m(self):
+        m0 = np.zeros((3, 4), np.uint8)
+        m0[0, 0] = 1
+        m0[1, 1] = 1
+        m1 = np.ones((3, 4), np.uint8)
+        enc = [encode_arr(x) for x in [m0, m1, m0]]
+        out = rlemasklib.decode(enc)
+        assert all(np.array_equal(out[:, :, i], x) for i, x in enumerate([m0, m1, m0]))
+
+    def test_decode_uncompressed_multi_mask(self):
+        m0 = np.zeros((3, 4), np.uint8)
+        m0[0, 0] = 1
+        m1 = np.ones((3, 4), np.uint8)
+        enc = [rlemasklib.encode(np.asfortranarray(x), compressed=False) for x in [m0, m1]]
+        out = rlemasklib.decode(enc)
+        assert np.array_equal(out[:, :, 0], m0) and np.array_equal(out[:, :, 1], m1)
+
+
+class TestConcatDomainGuard:
+    """hconcat/vconcat/tile must reject results exceeding the 2**32-1 pixel domain."""
+
+    def test_hconcat_over_domain(self):
+        a = RLEMask.ones((65535, 40000))
+        with pytest.raises(ValueError):
+            RLEMask.hconcat([a, a])
+
+    def test_vconcat_over_domain(self):
+        a = RLEMask.ones((65535, 40000))
+        with pytest.raises(ValueError):
+            RLEMask.vconcat([a, a])
+
+    def test_tile_over_domain(self):
+        a = RLEMask.ones((65535, 40000))
+        with pytest.raises(ValueError):
+            a.tile(1, 2)
+
+    def test_normal_concat_ok(self):
+        c = RLEMask.hconcat([RLEMask.ones((3, 2)), RLEMask.zeros((3, 2))])
+        assert c.shape == (3, 4) and c.area() == 6
+
+
+class TestFloatThreshold:
+    def test_float_threshold_honored(self):
+        d = np.array([[0.1, 0.4], [0.6, 0.9]], np.float32)
+        assert np.array_equal(np.array(RLEMask.from_array(d, threshold=0.5)),
+                              (d >= 0.5).astype(np.uint8))
+
+    def test_uint8_noninteger_threshold_rejected(self):
+        with pytest.raises(ValueError):
+            RLEMask.from_array(np.array([[0, 200]], np.uint8), threshold=1.5)
+
+    def test_uint8_integer_threshold_ok(self):
+        assert RLEMask.from_array(np.array([[0, 200]], np.uint8), threshold=128).area() == 1
+
+
+class TestUnsafeApiRaisesNotAborts:
+    """RLEs made invalid through the explicitly unsafe APIs must raise a catchable ValueError
+    on a later merge, not abort the process."""
+
+    def test_validate_sum_false_merge(self):
+        bad = RLEMask.from_counts([5, 5], (5, 5), validate_sum=False)
+        with pytest.raises(ValueError):
+            _ = bad | RLEMask.zeros((5, 5))
+
+    def test_shape_setter_merge(self):
+        m = RLEMask.ones((4, 4))
+        m.cy.shape = (5, 5)
+        with pytest.raises(ValueError):
+            _ = m | RLEMask.zeros((5, 5))
+
+    def test_counts_view_mutation_merge(self):
+        m = RLEMask.from_counts([2, 1, 1], (4, 1))
+        v = m.counts_view
+        v[0] = 99
+        with pytest.raises(ValueError):
+            _ = m & RLEMask.ones((4, 1))
+
+    def test_no_stale_error_after_caught(self):
+        try:
+            _ = RLEMask.from_counts([5, 5], (5, 5), validate_sum=False) | RLEMask.zeros((5, 5))
+        except ValueError:
+            pass
+        # a subsequent well-formed merge must not spuriously raise
+        assert (RLEMask.ones((3, 3)) | RLEMask.zeros((3, 3))).area() == 9
+
+
+class TestDictSizeValidation:
+    def test_non_integer_size_rejected(self):
+        with pytest.raises(ValueError):
+            RLEMask.from_dict({'size': [2.5, 2], 'counts': b'04'})
+
+
+class TestMorphologyOpenClose:
+    """opening/closing are advertised in the README/index; they must exist on RLEMask (not
+    only in the functional API) and equal the erode-then-dilate / dilate-then-erode compositions."""
+
+    def test_opening_equals_erode_then_dilate(self):
+        arr = (np.random.default_rng(1).random((50, 50)) < 0.5).astype(np.uint8)
+        m = RLEMask.from_array(arr)
+        assert m.opening(kernel_shape='square', kernel_size=3) == \
+            m.erode('square', 3).dilate('square', 3)
+
+    def test_closing_equals_dilate_then_erode(self):
+        arr = (np.random.default_rng(2).random((50, 50)) < 0.5).astype(np.uint8)
+        m = RLEMask.from_array(arr)
+        assert m.closing(kernel_shape='square', kernel_size=3) == \
+            m.dilate('square', 3).erode('square', 3)
+
+    def test_opening_inplace(self):
+        arr = (np.random.default_rng(3).random((30, 30)) < 0.5).astype(np.uint8)
+        m = RLEMask.from_array(arr)
+        ref = m.opening('circle', 5)
+        assert m.opening('circle', 5, inplace=True) is m
+        assert m == ref
+
+    def test_bad_kernel_shape_message(self):
+        with pytest.raises(ValueError, match="circle"):
+            RLEMask.ones((5, 5)).dilate("blob")
+        with pytest.raises(ValueError, match="kernel_shape"):
+            RLEMask.ones((5, 5)).dilate(1)
+
+
+class TestNamespaceHygiene:
+    def test_no_leaked_loop_globals(self):
+        assert not hasattr(rlemasklib, 'x')
+        assert not hasattr(rlemasklib, 'obj')
+
+    def test_from_png_multichannel_error_mentions_channel(self):
+        import io
+
+        from PIL import Image
+
+        img = np.zeros((5, 4, 3), np.uint8)
+        img[:, :, 0] = 255
+        buf = io.BytesIO()
+        Image.fromarray(img).save(buf, format='PNG')
+        with pytest.raises(ValueError, match="channel="):
+            RLEMask.from_png(data=buf.getvalue())
+
+
+class TestNaiveUserFixes:
+    """Fixes from the naive-user documentation review."""
+
+    def test_resize_with_scale_factors_only(self):
+        # docstring promised fx/fy alone is enough; output_imshape now defaults to None
+        assert RLEMask.ones((100, 100)).resize(fx=0.5, fy=0.5).shape == (50, 50)
+        assert RLEMask.ones((100, 100)).resize(fx=2.0, fy=0.5).shape == (50, 200)
+
+    def test_from_polygon_rejects_list(self):
+        outer = np.array([[0, 0], [10, 0], [10, 10]])
+        hole = np.array([[3, 3], [7, 3], [7, 7]])
+        with pytest.raises(ValueError):
+            RLEMask.from_polygon([outer, hole], imshape=(20, 20))
+        with pytest.raises(ValueError):
+            rlemasklib.from_polygon(np.zeros((2, 4, 2)), imshape=(20, 20))
+
+    def test_from_polygon_single_still_works(self):
+        m = RLEMask.from_polygon(np.array([[2, 2], [10, 2], [10, 10], [2, 10]]), imshape=(20, 20))
+        assert m.area() > 0
+
+    def test_polygon_holes_via_subtract(self):
+        # the documented replacement recipe for "polygon with holes"
+        outer = np.array([[0, 0], [100, 0], [100, 100], [0, 100]])
+        hole = np.array([[30, 30], [70, 30], [70, 70], [30, 70]])
+        full = RLEMask.from_polygon(outer, imshape=(200, 200))
+        holed = full - RLEMask.from_polygon(hole, imshape=(200, 200))
+        assert 0 < holed.area() < full.area()
+
+    def test_from_png_missing_file_raises_filenotfound(self):
+        with pytest.raises(FileNotFoundError):
+            RLEMask.from_png('/nonexistent/definitely/not/here.png')
+
+    def test_coco_compression_walkthrough_value(self):
+        # the doc walkthrough now matches reality: [8,12,6,15] -> b'8<63'
+        assert RLEMask.from_counts([8, 12, 6, 15], shape=(41, 1)).to_dict()['counts'] == b'8<63'
+
+    def test_boolfunc_difference_value(self):
+        # boolean-operations.rst: DIFFERENCE (A-B) is 0b0100 = 4
+        assert int(BoolFunc.DIFFERENCE) == 4
+
+    def test_decode_into_supports_integer_and_float_dtypes(self):
+        m = RLEMask.from_array(np.eye(4, dtype=np.uint8))
+        for dt in (np.uint8, np.int32, np.uint16, np.int64, np.float32, np.float64):
+            arr = np.zeros((4, 4), dt)
+            m.decode_into(arr, 7)
+            assert arr.max() == 7
