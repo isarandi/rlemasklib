@@ -47,6 +47,7 @@ cdef extern from "basics.h" nogil:
     void rleFree(RLE *R)
     uint *rleFrCnts(RLE *R, siz h, siz w, siz m, uint *cnts)
     void rleBorrow(RLE *R, siz h, siz w, siz m, uint *cnts)
+    void rleEliminateZeroRuns(RLE *R)
 
 cdef extern from "encode_decode.h" nogil:
     void rleEncode(RLE *R, const byte *M, siz h, siz w, siz n)
@@ -209,6 +210,9 @@ def _from_leb128_dicts(rleObjs):
                 rleFrCnts(&Rs._R[i], h, w, 0, NULL)
         else:
             raise ValueError("RLE dict must contain 'counts', 'zcounts' or 'ucounts'")
+        # externally supplied counts may hold interior zero-length runs; normalize to the
+        # canonical form that the run-walking algorithms (merge, etc.) rely on
+        rleEliminateZeroRuns(&Rs._R[i])
 
     return Rs
 
@@ -269,6 +273,8 @@ def _from_uncompressed_dicts(rleObjs):
                 f'Invalid RLE: Sum of runlengths is {counts.sum()}, which does not match the '
                 f'expected {h * w} based on the mask height {h} and width {w}')
         rleFrCnts(&Rs._R[i], h, w, len(counts), <uint *> &counts[0])
+        # normalize any interior zero-length runs to the canonical form
+        rleEliminateZeroRuns(&Rs._R[i])
 
     return Rs
 
@@ -490,6 +496,7 @@ def frUncompressedRLE(ucRles):
             rleFrCnts(&Rs._R[0], h, w, len(cnts), <uint *> &cnts[0])
         else:
             rleFrCnts(&Rs._R[0], h, w, 0, NULL)
+        rleEliminateZeroRuns(&Rs._R[0])
         objs.append(_to_leb128_dicts(Rs)[0])
     return objs
 

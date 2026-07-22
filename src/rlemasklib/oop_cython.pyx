@@ -41,6 +41,7 @@ cdef extern from "basics.h" nogil:
     void rlesInit(RLE **R, siz n)
     uint *rleInit(RLE *R, siz h, siz w, siz m)
     uint *rleFrCnts(RLE *R, siz h, siz w, siz m, uint *cnts)
+    void rleEliminateZeroRuns(RLE *R)
     void rleBorrow(RLE *R, siz h, siz w, siz m, uint *cnts)
     void rleCopy(const RLE *R, RLE *M)
     void rleMoveTo(RLE *R, RLE *M)
@@ -293,9 +294,16 @@ cdef class RLECy:
         if len(data) > 0:
             if order == 'F':
                 rleFrCnts(&self.r, shape[0], shape[1], len(data), &data[0])
+                # user-supplied counts may hold interior zero-length runs; normalize
+                rleEliminateZeroRuns(&self.r)
             else:
-                rleBorrow(&tmp, shape[1], shape[0], len(data), &data[0])
+                # own the counts and canonicalize before transposing: rleTranspose merges
+                # internally and would overflow on non-canonical input (which a borrowed,
+                # non-reallocatable view could not be normalized in place)
+                rleFrCnts(&tmp, shape[1], shape[0], len(data), &data[0])
+                rleEliminateZeroRuns(&tmp)
                 rleTranspose(&tmp, &self.r)
+                rleFree(&tmp)
         else:
             rleInit(&self.r, shape[0], shape[1], 0)
 
@@ -331,8 +339,11 @@ cdef class RLECy:
 
     cpdef _i_from_dict(self, d: dict):
         cdef uint[::1] data
-        cdef siz h = d["size"][0]
-        cdef siz w = d["size"][1]
+        size = d["size"]
+        if size[0] != int(size[0]) or size[1] != int(size[1]):
+            raise ValueError(f"Mask size must be integers, got {list(size)}")
+        cdef siz h = int(size[0])
+        cdef siz w = int(size[1])
         if h > 0xFFFFFFFF or w > 0xFFFFFFFF or h * w > <siz>0xFFFFFFFF:
             raise ValueError(
                 f"Image dimensions {h}x{w} exceed maximum supported size "
@@ -363,6 +374,9 @@ cdef class RLECy:
         else:
             raise ValueError(
                 "RLE dict must contain 'counts', 'ucounts', or 'zcounts' key")
+        # Externally supplied counts may contain interior zero-length runs (valid sum, but
+        # violating the canonical-form invariant that run-walking algorithms rely on).
+        rleEliminateZeroRuns(&self.r)
 
     def _i_from_bbox(self, bbox, imshape):
         cdef np.ndarray[np.double_t, ndim=1] bbox_double = np.ascontiguousarray(

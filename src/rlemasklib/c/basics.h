@@ -100,8 +100,10 @@ void rleSetInplace(RLE *R, siz y, siz x, byte value);
 // Check whether two RLEs are equal (in size and pixel content)
 bool rleEqual(const RLE *A, const RLE *B);
 
-// Remove any non-first zero runlengths by adding and shifting the runs accordingly.
-static void rleEliminateZeroRuns(RLE *R);
+// Remove any non-first zero runlengths by adding and shifting the runs accordingly. Enforces
+// the canonical form that run-walking algorithms rely on; used both internally after ops that
+// may leave zero runs, and at the constructor boundary to normalize externally supplied counts.
+void rleEliminateZeroRuns(RLE *R);
 
 // Reallocate the runlength counts to have m runs, which may be more or less than the current
 // number of runs.

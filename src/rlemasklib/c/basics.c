@@ -193,7 +193,7 @@ bool rleEqual(const RLE *A, const RLE *B) {
     return true;
 }
 
-static void rleEliminateZeroRuns(RLE *R) {
+void rleEliminateZeroRuns(RLE *R) {
     if (R->m <= 1) {
         return;
     }
