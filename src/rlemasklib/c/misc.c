@@ -14,6 +14,7 @@
 #include "transpose_flip.h"
 #include "moments.h"
 #include "shapes.h"
+#include "encode_decode.h"
 #include "misc.h"
 
 static uint _size_after_striding(uint start, uint size, uint stride);
@@ -310,6 +311,79 @@ void rleRepeat(const RLE *R, RLE *M, siz nh, siz nw) {
 //    rleFree(&result);
 //
 //}
+
+// Separable box average-pooling: output(oy, ox) is set iff the number of set pixels in the
+// kh x kw window anchored at input position (oy*sh, ox*sw) is >= threshold. This is a "valid"
+// pooling (no padding) with striding, matching the crop-and-count reference (kh*kw shifted crops
+// fed to rleMergeAtLeast2) exactly. The window count is computed as a separable running sum over
+// a decoded dense buffer (a vertical pass then a horizontal pass), which is O(h*w) regardless of
+// the kernel size, instead of the O(kh*kw * runs) of the K-way merge over shifted crops.
+void rleAvgPoolBoxSeparable(
+        const RLE *R, RLE *M, uint kh, uint kw, uint sh, uint sw, uint threshold) {
+    siz h = R->h;
+    siz w = R->w;
+
+    if (h < kh || w < kw) {
+        siz out_h = (h < kh) ? 0 : _size_after_striding(0, h - kh + 1, sh);
+        siz out_w = (w < kw) ? 0 : _size_after_striding(0, w - kw + 1, sw);
+        rleInit(M, out_h, out_w, 0);
+        return;
+    }
+
+    siz valid_h = h - kh + 1; // valid output rows before striding
+    siz valid_w = w - kw + 1; // valid output cols before striding
+    siz out_h = _size_after_striding(0, valid_h, sh);
+    siz out_w = _size_after_striding(0, valid_w, sw);
+
+    // Decode to a dense column-major buffer: dense[x*h + y] = mask(y, x).
+    byte *dense = safe_calloc(h * w, sizeof(byte));
+    rleDecode(R, dense, 1, 1);
+
+    // Vertical pass: colsum[x*valid_h + y] = sum over i in [0,kh) of mask(y+i, x), computed with a
+    // running window sum down each column. The count fits in uint32 (<= kh <= h*w).
+    uint32_t *colsum = safe_malloc(valid_h * w * sizeof(uint32_t));
+    for (siz x = 0; x < w; x++) {
+        const byte *col = dense + x * h;
+        uint32_t *cs = colsum + x * valid_h;
+        uint acc = 0;
+        for (uint i = 0; i < kh; i++) {
+            acc += col[i];
+        }
+        cs[0] = acc;
+        for (siz y = 1; y < valid_h; y++) {
+            acc += col[y + kh - 1] - col[y - 1];
+            cs[y] = acc;
+        }
+    }
+    free(dense);
+
+    // Horizontal pass + threshold, sampling only the strided output positions. For each output row
+    // oy (input row y = oy*sh) slide a running kw-wide window sum across the vertical column sums.
+    byte *out = safe_calloc(out_h * out_w, sizeof(byte));
+    for (siz oy = 0; oy < out_h; oy++) {
+        siz y = oy * sh;
+        uint acc = 0;
+        for (uint j = 0; j < kw; j++) {
+            acc += colsum[j * valid_h + y];
+        }
+        siz ox = 0;
+        for (siz x = 0; x < valid_w; x++) {
+            if (x % sw == 0) {
+                if (acc >= threshold) {
+                    out[ox * out_h + oy] = 1;
+                }
+                ox++;
+            }
+            if (x + 1 < valid_w) { // slide the window right by one column (keeps x+kw in bounds)
+                acc += colsum[(x + kw) * valid_h + y] - colsum[x * valid_h + y];
+            }
+        }
+    }
+    free(colsum);
+
+    rleEncode(M, out, out_h, out_w, 1);
+    free(out);
+}
 
 void rleContours(const RLE *R, RLE *M) {
     if (R->m <= 1 || R->h == 0 || R->w == 0) {

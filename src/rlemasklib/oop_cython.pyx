@@ -89,6 +89,8 @@ cdef extern from "misc.h" nogil:
     void rleConcatHorizontal(const RLE **R, RLE *M, siz n)
     void rleConcatVertical(const RLE **R, RLE *M, siz n)
     void rleContours(const RLE *R, RLE *M)
+    void rleAvgPoolBoxSeparable(
+        const RLE *R, RLE *M, uint kh, uint kw, uint sh, uint sw, uint threshold)
 
 cdef extern from "moments.h" nogil:
     void rleArea(const RLE *R, siz n, uint *a)
@@ -865,14 +867,33 @@ cdef class RLECy:
 
     def _r_avg_pool_valid(
             self, kernel_h: int, kernel_w: int, threshold: int = -1, stride_h: int = 1,
-            stride_w: int = 1):
+            stride_w: int = 1, impl: str = "auto"):
 
         kh, kw = kernel_h, kernel_w
         k_area = kh * kw
         if threshold == -1:
             threshold = k_area - (k_area // 2)
+
         h = self.r.h
         w = self.r.w
+        m = self.r.m
+
+        # The separable box sum costs ~O(h*w) regardless of kernel size, while the shift-and-merge
+        # path costs ~O(k_area * min(h*w, k_area * runs)). Pick whichever is cheaper: the separable
+        # path wins for larger kernels and/or denser masks, the merge path for small sparse kernels.
+        # The constant is tuned so the crossover matches measurements (~7x7 on a megapixel mask).
+        if impl == "auto":
+            use_separable = k_area * min(h * w, k_area * m) > 8 * h * w
+        else:
+            use_separable = impl == "separable"
+
+        cdef RLECy sep_result
+        if use_separable:
+            sep_result = RLECy()
+            rleAvgPoolBoxSeparable(
+                &self.r, &sep_result.r, kh, kw, stride_h, stride_w, threshold)
+            return sep_result
+
         cys = [
             self._r_crop(
                 i, j,

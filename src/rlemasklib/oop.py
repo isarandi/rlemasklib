@@ -1064,6 +1064,7 @@ class RLEMask:
         kernel_size: Sequence[int],
         stride: Sequence[int] = (1, 1),
         threshold: int = -1,
+        _impl: str = "auto",
     ) -> "RLEMask":
         """Perform a 2D average pooling with the given kernel size and threshold the result.
 
@@ -1103,7 +1104,7 @@ class RLEMask:
 
         return RLEMask._init(
             self.cy._r_avg_pool_valid(
-                kernel_size[0], kernel_size[1], threshold, stride[0], stride[1]
+                kernel_size[0], kernel_size[1], threshold, stride[0], stride[1], _impl
             )
         )
 
