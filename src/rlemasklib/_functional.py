@@ -217,7 +217,7 @@ def ones_like(mask: dict) -> dict:
 
 
 def from_bbox(bbox, imshape=None, imsize=None):
-    """Connvert a bounding box to an RLE mask of the given size.
+    """Convert a bounding box to an RLE mask of the given size.
 
     Args:
         bbox: a bounding box, in the format [x_start, y_start, width, height]

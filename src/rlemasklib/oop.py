@@ -175,8 +175,8 @@ class RLEMask:
             imsize: [width, height] of the desired mask (either this or imshape must be provided)
 
         Returns:
-            An RLEMask object where the area of the provided bounding box has the value 1, and \
-                the rest is 0.
+            An RLEMask object where the area of the provided bounding box has the value 1, and
+            the rest is 0.
 
         Examples:
             Create a 3x4 rectangle at position (2, 1) in an 6x8 image:
@@ -208,8 +208,8 @@ class RLEMask:
             imsize: [width, height] of the desired mask (either this or imshape must be provided)
 
         Returns:
-            An RLEMask object where the area of the provided circle has the value 1, and the \
-                rest is 0.
+            An RLEMask object where the area of the provided circle has the value 1, and the
+            rest is 0.
 
         Examples:
             Create a circle with center (4, 3) and radius 2.5 in an 8x8 image:
@@ -352,8 +352,8 @@ class RLEMask:
                 (e.g., RLEMask, NumPy array)
 
         Returns:
-            A new RLEMask object representing a mask of ones with the same shape as the input \
-                mask.
+            A new RLEMask object representing a mask of ones with the same shape as the input
+            mask.
         """
         return RLEMask.ones(mask.shape)
 
@@ -367,7 +367,7 @@ class RLEMask:
 
         Returns:
             A new RLEMask object representing a mask of zeros with the same shape as the input
-                mask.
+            mask.
         """
         return RLEMask.zeros(mask.shape)
 
@@ -2018,7 +2018,7 @@ class RLEMask:
                ##..    .##.    #.#.
 
         See Also:
-            :meth:`merge_custom`, which allows merging with custom n-ary Boolean functions.
+            :meth:`merge_many_custom`, which allows merging with custom n-ary Boolean functions.
             :meth:`merge_many`, which allows merging with different binary Boolean functions.
         """
         self._raise_if_different_shape(other)
@@ -2165,7 +2165,7 @@ class RLEMask:
         pixel of all input masks.
 
         Args:
-            masks: a sequence of at RLE masks
+            masks: a sequence of RLE masks
             func: a callable that takes n bools and returns a bool
 
         Returns:
@@ -2261,7 +2261,7 @@ class RLEMask:
     def merge_to_label_map(rles: Sequence["RLEMask"]) -> np.ndarray:
         """Merge a list of RLE masks to a label map indicating which masks contains each pixel.
 
-        That is, the output is an integer-valued numpy array containg for each pixel the (index+1)
+        That is, the output is an integer-valued numpy array containing for each pixel the (index+1)
         of the mask that has the pixel set, or 0 if no mask has the pixel set.
 
         If multiple masks have the pixel set, the index of the last among the input masks will
@@ -3306,7 +3306,7 @@ class RLEMask:
         Writes ``fg_value`` to foreground pixels and/or ``bg_value`` to background pixels.
         Pixels whose corresponding parameter is ``None`` are left unchanged.
 
-        Supports uint8, float32, and float64 arrays (2D or 3D HWC).
+        Supports integer and floating-point dtype arrays (2D or 3D HWC).
 
         Args:
             arr: A numpy array with shape matching the mask.

@@ -17,16 +17,18 @@ Polygon to mask
 
     mask = RLEMask.from_polygon(polygon, imshape=(480, 640))
 
-Multiple polygons (with holes)
-------------------------------
+Polygons with holes
+-------------------
 
-For a polygon with holes, pass a list of vertex arrays.
-The first is the outer boundary, the rest are holes::
+``from_polygon`` rasterizes a single polygon; it does not accept a list of rings
+(passing one raises ``ValueError``). To cut a hole, rasterize the outer and inner
+polygons separately and subtract::
 
     outer = np.array([[0, 0], [100, 0], [100, 100], [0, 100]])
     hole = np.array([[30, 30], [70, 30], [70, 70], [30, 70]])
 
-    mask = RLEMask.from_polygon([outer, hole], imshape=(200, 200))
+    mask = (RLEMask.from_polygon(outer, imshape=(200, 200))
+            - RLEMask.from_polygon(hole, imshape=(200, 200)))
 
 Union of separate polygons
 --------------------------

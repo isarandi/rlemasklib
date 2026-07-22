@@ -68,24 +68,23 @@ the truth table in 4 bits::
     bit 2: f(1, 0)
     bit 3: f(1, 1)
 
-To evaluate: ``f(va, vb) = (truth_table >> (va + 2*vb)) & 1``
+To evaluate: ``f(va, vb) = (truth_table >> (2*va + vb)) & 1``
 
 Standard operations::
 
     AND:        0b1000 = 8   (only 1 when both are 1)
     OR:         0b1110 = 14  (1 unless both are 0)
     XOR:        0b0110 = 6   (1 when different)
-    DIFF (A-B): 0b0010 = 2   (1 when A=1 and B=0)
-    DIFF (B-A): 0b0100 = 4   (1 when B=1 and A=0)
+    DIFF (A-B): 0b0100 = 4   (1 when A=1 and B=0; this is BoolFunc.DIFFERENCE)
+    DIFF (B-A): 0b0010 = 2   (1 when B=1 and A=0)
 
 This lets us write one merge function that handles all boolean operations.
 
 Same-size requirement
 ---------------------
 
-The merge algorithm assumes all masks have identical dimensions. The output
-takes its height and width from the first mask. If masks differ in size,
-results are undefined.
+The merge algorithm requires all masks to have identical dimensions. If masks
+differ in size, the merge raises ``ValueError``.
 
 This is intentional: masks represent the same image region, so they should
 be the same size. If you need to combine masks of different sizes, pad or

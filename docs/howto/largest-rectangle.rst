@@ -38,7 +38,7 @@ With both constraints
 ::
 
     bbox = mask.largest_interior_rectangle_around(
-        center=(320, 240),
+        center_point=(320, 240),
         aspect_ratio=4/3
     )
 

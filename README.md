@@ -27,6 +27,8 @@ mask = RLEMask(np.array([
     [1, 1, 0],
     [0, 0, 1]
 ]))
+mask1 = RLEMask.from_array(np.eye(3, dtype=np.uint8))
+mask2 = RLEMask.from_array(np.eye(3, dtype=np.uint8)[::-1])
 
 # Boolean operations
 union = mask1 | mask2

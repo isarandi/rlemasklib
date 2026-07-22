@@ -59,8 +59,11 @@ often have similar lengths. Same for runs of 1s (indices 1, 3, 5, ...).
 
 So we encode::
 
-    encoded[i] = cnts[i] - cnts[i-2]    (for i >= 2)
-    encoded[i] = cnts[i]                (for i < 2)
+    encoded[i] = cnts[i] - cnts[i-2]    (for i > 2)
+    encoded[i] = cnts[i]                (for i <= 2)
+
+(The first three runs are stored raw; the delta starts at index 3. This matches
+pycocotools.)
 
 For typical blob-like objects, this works well: RLE scans column by column,
 and a continuous shape has similar vertical extent in neighboring columns.
@@ -98,12 +101,13 @@ Encoding walkthrough
 
 Let's encode the run lengths [8, 12, 6, 15].
 
-First, compute deltas::
+First, compute deltas (the first three runs are stored raw; from index 3 on, each
+run stores its difference from the run two positions earlier)::
 
-    cnts[0] = 8   → delta = 8   (no previous run of same type)
-    cnts[1] = 12  → delta = 12  (no previous run of same type)
-    cnts[2] = 6   → delta = 6 - 8 = -2
-    cnts[3] = 15  → delta = 15 - 12 = 3
+    cnts[0] = 8   → delta = 8   (raw)
+    cnts[1] = 12  → delta = 12  (raw)
+    cnts[2] = 6   → delta = 6   (raw)
+    cnts[3] = 15  → delta = 15 - cnts[1] = 15 - 12 = 3
 
 Now encode each delta:
 
@@ -118,41 +122,43 @@ Now encode each delta:
 - Fits in 5 bits, sign bit is 0, matches sign
 - Chunk: 01100 = 12, add 48 → ASCII 60 = '<'
 
-**-2**: binary ...111110
+**6**: binary 00110
 
-- Last 5 bits: 11110
-- Sign bit is 1, remaining bits are all 1s, so we're done
-- Chunk: 11110 = 30, add 48 → ASCII 78 = 'N'
+- Fits in 5 bits, sign bit is 0, matches sign
+- Chunk: 00110 = 6, add 48 → ASCII 54 = '6'
 
 **3**: binary 00011
 
 - Fits in 5 bits, sign bit is 0, matches sign
 - Chunk: 00011 = 3, add 48 → ASCII 51 = '3'
 
-Result: ``"8<N3"``
+Result: ``"8<63"``
+
+(For an example of a *negative* delta, see the ``-3 → 'M'`` case in "Signed
+representation" above.)
 
 Decoding walkthrough
 --------------------
 
-Decode ``"8<N3"`` back to run lengths.
+Decode ``"8<63"`` back to run lengths.
 
 **'8'**: 56 - 48 = 8 = 0b01000
 
 - Continuation bit: 0, last chunk
 - Data: 8, sign bit 0, no extension
-- Delta: 8, cnts[0] = 8
+- Raw (index <= 2): cnts[0] = 8
 
 **'<'**: 60 - 48 = 12 = 0b01100
 
 - Continuation bit: 0, last chunk
 - Data: 12, sign bit 0, no extension
-- Delta: 12, cnts[1] = 12
+- Raw (index <= 2): cnts[1] = 12
 
-**'N'**: 78 - 48 = 30 = 0b11110
+**'6'**: 54 - 48 = 6 = 0b00110
 
 - Continuation bit: 0, last chunk
-- Data: 30 & 0x1f = 30, sign bit 1, extend with 1s
-- Delta: -2, cnts[2] = cnts[0] + (-2) = 8 - 2 = 6
+- Data: 6, sign bit 0, no extension
+- Raw (index <= 2): cnts[2] = 6
 
 **'3'**: 51 - 48 = 3 = 0b00011
 

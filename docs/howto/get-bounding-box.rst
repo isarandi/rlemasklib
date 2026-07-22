@@ -53,5 +53,5 @@ With COCO-format dicts::
 
     import rlemasklib
 
-    bbox = rlemasklib.toBbox(mask_dict)  # Single mask
-    bboxes = rlemasklib.toBbox([mask1, mask2, mask3])  # Multiple masks
+    bbox = rlemasklib.to_bbox(mask_dict)  # Single mask
+    bboxes = rlemasklib.to_bbox([mask1, mask2, mask3])  # Multiple masks

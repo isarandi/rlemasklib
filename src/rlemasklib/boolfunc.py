@@ -15,6 +15,7 @@ class BoolFunc(IntEnum):
     using bitwise operators. Several named functions are provided for convenience.
 
     Examples:
+        >>> import numpy as np
         >>> from rlemasklib import RLEMask, BoolFunc
         >>> m1 = RLEMask.from_array(np.eye(3))
         >>> m2 = RLEMask.from_array(np.eye(3)[::-1])

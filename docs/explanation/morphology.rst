@@ -109,13 +109,15 @@ Separable kernels
 Many useful kernels are separable: a 3×3 cross (no corners) is just
 horizontal and vertical lines. A 3×3 square is the dilation of a cross.
 
-The library provides:
+The library provides ``erode3x3`` and ``dilate3x3``, whose kernel is selected by the
+``connectivity`` argument:
 
-- ``erode3x3``, ``dilate3x3``: square kernel
-- ``erode_cross3x3``, ``dilate_cross3x3``: cross kernel
+- ``connectivity=4`` (the default): cross kernel (no corners)
+- ``connectivity=8``: square kernel
 
 The cross kernel is faster (fewer shift operations). Use it when diagonal
-connectivity doesn't matter.
+connectivity doesn't matter. For larger kernels, ``erode``/``dilate`` take a
+``kernel_shape`` (``'circle'``, ``'square'``, ``'diamond'``, ``'cross'``) and ``kernel_size``.
 
 Opening and closing
 -------------------
