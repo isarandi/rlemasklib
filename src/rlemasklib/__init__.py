@@ -106,17 +106,26 @@ from ._functional import (
     merge,
 )
 
-# Set the __module__ attribute of all exported functions/classes to this module.
-# This is necessary for sphinx-codeautolink to correctly resolve references like
-# `RLEMask` to `rlemasklib.RLEMask` in code blocks. Without this, sphinx-codeautolink
-# cannot link names that are imported (e.g., `from rlemasklib import RLEMask`) because
-# it doesn't know that `RLEMask` refers to `rlemasklib.RLEMask` rather than
-# `rlemasklib.oop.RLEMask`. The _module_original_ attribute preserves the true module
-# for use by docs/conf.py's `module_restored` context manager when resolving source links.
-# The hasattr guard keeps aliases (full is ones, empty is zeros) from re-reading the already
-# patched __module__ on their second pass, and makes the loop idempotent across re-imports.
-for x in __all__:
-    obj = globals()[x]
-    if not hasattr(obj, '_module_original_'):
-        obj._module_original_ = obj.__module__  # noqa: vulture
-    obj.__module__ = __name__
+def _set_module_for_docs(module_name, module_globals, all_names):
+    """Override ``__module__`` on exported objects so sphinx-codeautolink resolves names.
+
+    sphinx-codeautolink uses ``__module__`` to find the docs page for a name in a code block;
+    without this, e.g. ``RLEMask`` imported from ``rlemasklib.oop`` would not link to
+    ``rlemasklib.RLEMask``. The true module is saved as ``_module_original_`` so that
+    ``docs/conf.py``'s ``module_restored`` context manager can still resolve source-code links.
+
+    Doing this in a function (rather than a module-level loop) keeps the loop variables out of
+    the package namespace. The ``hasattr`` guard makes it idempotent across re-imports and stops
+    aliased exports (``full`` is ``ones``, ``empty`` is ``zeros`` -- the same object under two
+    names) from re-reading the already-patched module into ``_module_original_``.
+    """
+    for name in all_names:
+        obj = module_globals.get(name)
+        if obj is None:
+            continue
+        if not hasattr(obj, '_module_original_'):
+            obj._module_original_ = obj.__module__  # noqa: vulture
+        obj.__module__ = module_name
+
+
+_set_module_for_docs(__name__, globals(), __all__)
