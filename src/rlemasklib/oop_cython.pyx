@@ -421,14 +421,20 @@ cdef class RLECy:
     def _i_from_png_file(self, str path, int threshold=1, int channel=-1):
         cdef bytes path_bytes = path.encode('utf-8')
         if not rleFromPngFile(&self.r, <const char *> path_bytes, threshold, channel):
-            raise ValueError("Failed to read PNG (must be 8-bit, supported types: grayscale, gray+alpha, RGB, RGBA)")
+            raise ValueError(
+                "Failed to read PNG (expected 8-bit grayscale, gray+alpha, RGB or RGBA). "
+                "With the default channel=-1 only grayscale is accepted; for a multi-channel "
+                "PNG pass channel=0..N-1 to select which channel to threshold.")
 
     def _i_from_png_bytes(self, data, int threshold=1, int channel=-1):
         cdef const byte[::1] data_view = data
         if data_view.shape[0] == 0:
             raise ValueError("Empty PNG data")
         if not rleFromPngBytes(&self.r, &data_view[0], len(data_view), threshold, channel):
-            raise ValueError("Failed to decode PNG (must be 8-bit, supported types: grayscale, gray+alpha, RGB, RGBA)")
+            raise ValueError(
+                "Failed to decode PNG (expected 8-bit grayscale, gray+alpha, RGB or RGBA). "
+                "With the default channel=-1 only grayscale is accepted; for a multi-channel "
+                "PNG pass channel=0..N-1 to select which channel to threshold.")
 
     @staticmethod
     cdef RLECy _r_from_C_rle(RLE *rle, steal=False):

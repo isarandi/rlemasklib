@@ -250,6 +250,10 @@ def from_polygon(poly, imshape=None, imsize=None):
     """
     imshape = get_imshape(imshape, imsize)
     poly = np.asanyarray(poly, dtype=np.float64)
+    if poly.ndim >= 3:
+        raise ValueError(
+            "from_polygon expects a single polygon as an (N, 2) array or a flat "
+            "[x0, y0, x1, y1, ...] sequence; a list of polygons or holes is not supported")
     return rlemasklib_cython.frPoly(poly[np.newaxis], imshape[0], imshape[1])[0]
 
 

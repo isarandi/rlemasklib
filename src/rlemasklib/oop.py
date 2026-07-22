@@ -265,6 +265,8 @@ class RLEMask:
             raise ValueError("Exactly one of 'path' or 'data' must be provided")
         result = RLEMask._init()
         if path is not None:
+            if not os.path.exists(path):
+                raise FileNotFoundError(f"No such file: {path}")
             result.cy._i_from_png_file(str(path), threshold, channel)
         else:
             result.cy._i_from_png_bytes(data, threshold, channel)
@@ -281,6 +283,10 @@ class RLEMask:
 
         Returns:
             An RLEMask object representing the input polygon (1 inside the polygon, 0 outside).
+
+        Raises:
+            ValueError: if given a list of polygons / a 3D array. Only a single polygon is
+                supported (multiple rings / holes are not).
 
         Examples:
             Create a triangle from polygon vertices:
@@ -301,7 +307,11 @@ class RLEMask:
 
         result = RLEMask._init()
         imshape = _get_imshape(imshape, imsize)
-        poly = np.asarray(poly)
+        poly = np.asarray(poly, dtype=np.float64)
+        if poly.ndim >= 3:
+            raise ValueError(
+                "from_polygon expects a single polygon as an (N, 2) array or a flat "
+                "[x0, y0, x1, y1, ...] sequence; a list of polygons or holes is not supported")
         result.cy._i_from_polygon(poly.reshape(-1), imshape)
         return result
 
@@ -1121,7 +1131,7 @@ class RLEMask:
 
     def resize(
         self,
-        output_imshape: Optional[Sequence[int]],
+        output_imshape: Optional[Sequence[int]] = None,
         fx: Optional[float] = None,
         fy: Optional[float] = None,
     ) -> "RLEMask":
@@ -1494,7 +1504,9 @@ class RLEMask:
             heights = np.zeros_like(x, dtype=np.uint32)
             heights[-1] = radius
         else:
-            raise ValueError("Unknown kernel shape")
+            raise ValueError(
+                f"Unknown kernel_shape {kernel_shape!r}; expected one of "
+                f"'circle', 'square', 'diamond', 'cross'")
 
         to_merge = []
         vertical = self if inplace else self.copy()
@@ -1550,6 +1562,48 @@ class RLEMask:
         result = self.complement(inplace=inplace)
         result.dilate(kernel_shape, kernel_size, inplace=True)
         return result.complement(inplace=True)
+
+    def opening(self, kernel_shape="circle", kernel_size=7, inplace=False) -> "RLEMask":
+        """Morphologically open the mask (erosion followed by dilation).
+
+        Opening removes small foreground specks and thin protrusions while leaving larger
+        regions roughly intact.
+
+        Args:
+            kernel_shape: the shape of the kernel, one of 'circle', 'square', 'diamond' or
+                'cross'
+            kernel_size: the size of the kernel
+            inplace: whether to perform the operation in place or to return a new object
+
+        Returns:
+            The RLEMask object representing the opened mask (self if inplace=True)
+
+        See Also:
+            :meth:`closing`, :meth:`erode`, :meth:`dilate`
+        """
+        result = self.erode(kernel_shape, kernel_size, inplace=inplace)
+        return result.dilate(kernel_shape, kernel_size, inplace=True)
+
+    def closing(self, kernel_shape="circle", kernel_size=7, inplace=False) -> "RLEMask":
+        """Morphologically close the mask (dilation followed by erosion).
+
+        Closing fills small background holes and thin gaps while leaving larger regions
+        roughly intact.
+
+        Args:
+            kernel_shape: the shape of the kernel, one of 'circle', 'square', 'diamond' or
+                'cross'
+            kernel_size: the size of the kernel
+            inplace: whether to perform the operation in place or to return a new object
+
+        Returns:
+            The RLEMask object representing the closed mask (self if inplace=True)
+
+        See Also:
+            :meth:`opening`, :meth:`erode`, :meth:`dilate`
+        """
+        result = self.dilate(kernel_shape, kernel_size, inplace=inplace)
+        return result.erode(kernel_shape, kernel_size, inplace=True)
 
     def dilate3x3(self, connectivity: int = 4, inplace: bool = False) -> "RLEMask":
         """Dilate a mask with a 3x3 kernel.
