@@ -104,6 +104,62 @@ def parse_horizontal_masks(lines):
     return masks
 
 
+def grid_to_ascii(grid):
+    """Render a boolean grid back to '#'/'.' ASCII art, one row per line."""
+    return "\n".join("".join("#" if cell else "." for cell in row) for row in grid)
+
+
+def validate_demo(template_lines, masks):
+    """Evaluate each ``==`` expression of a mask-demo against the library itself.
+
+    The ``[name]`` references are bound to RLEMask objects built from the parsed ASCII
+    grids, and the expression is evaluated as Python. This keeps every demo in the docs
+    verified against actual library behavior at build time.
+
+    Returns a list of error strings (empty if all expressions hold).
+    """
+    import numpy as np
+    from rlemasklib import RLEMask, BoolFunc
+
+    namespace = {"RLEMask": RLEMask, "BoolFunc": BoolFunc, "np": np}
+    for name, grid in masks.items():
+        namespace[name] = RLEMask.from_array(np.array(grid, dtype=np.uint8))
+
+    ref_pattern = re.compile(r"\[(\w+)(?:\((\d+),(\d+),(\d+),(\d+)\))?\]")
+
+    def substitute(m):
+        if m.group(1) not in masks:
+            return m.group(0)
+        if m.group(2) is not None:
+            # A rect-annotated reference [A(x,y,w,h)] asserts that the expression
+            # yields this (x, y, w, h) box; visually it renders mask A with the box.
+            return f"np.array(({m.group(2)}, {m.group(3)}, {m.group(4)}, {m.group(5)}))"
+        return m.group(1)
+
+    errors = []
+    for line in template_lines:
+        if "==" not in line:
+            continue
+        expr = ref_pattern.sub(substitute, line)
+        try:
+            result = eval(expr, namespace)
+        except Exception as e:
+            errors.append(f"expression {expr!r} raised {type(e).__name__}: {e}")
+            continue
+        if isinstance(result, np.ndarray):
+            result = result.all()
+        if not result:
+            message = f"expression {expr!r} is false"
+            # For the common `<lhs> == <mask>` form, show what the lhs actually
+            # evaluates to so the ASCII grid in the docs can be corrected directly.
+            lhs_rhs = re.fullmatch(r"(.+?)==\s*(\w+)\s*", expr)
+            if lhs_rhs and lhs_rhs.group(2) in masks:
+                actual = np.array(eval(lhs_rhs.group(1), namespace))
+                message += f"; the left-hand side actually equals:\n{grid_to_ascii(actual)}"
+            errors.append(message)
+    return errors
+
+
 def mask_to_inline_html(grid, cell_size=20, rect=None):
     """Convert boolean grid to inline HTML div structure.
 
@@ -188,6 +244,14 @@ class MaskDemoDirective(Directive):
 
         # Parse mask definitions and template
         masks, template_lines = self._parse_content(content)
+
+        errors = validate_demo(template_lines, masks)
+        if errors:
+            # A plain exception (not a docutils system message) so the build cannot
+            # silently succeed with a wrong demo.
+            raise RuntimeError(
+                "mask-demo validation failed:\n" + "\n".join(errors)
+            )
 
         # Build HTML by replacing [name] with mask HTML
         html_lines = []
