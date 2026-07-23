@@ -96,7 +96,19 @@ class RLEMask:
                 height * width.
             ValueError: if the order is not 'F' or 'C'.
         """
-        counts = np.ascontiguousarray(counts, dtype=np.uint32)
+        try:
+            counts = np.ascontiguousarray(counts)
+        except OverflowError:
+            raise ValueError(
+                "Run-length counts must be non-negative integers that fit in uint32"
+            ) from None
+        if counts.dtype != np.uint32:
+            if counts.dtype.kind not in "iufb" or np.any(
+                (counts < 0) | (counts > 0xFFFFFFFF)
+            ):
+                raise ValueError(
+                    "Run-length counts must be non-negative integers that fit in uint32")
+            counts = np.ascontiguousarray(counts, dtype=np.uint32)
         # Note: uint32 sum can overflow for images >65535x65535.
         # Consider raising for such gigantic masks in the future.
         if validate_sum and np.sum(counts, dtype=np.uint64) != shape[0] * shape[1]:

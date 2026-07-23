@@ -394,6 +394,15 @@ class TestLargeMasks:
         with pytest.raises(ValueError):
             RLEMask.from_counts([10 ** 10], shape=(10 ** 5, 10 ** 5), order='F')
 
+    def test_counts_beyond_uint32_raise_cleanly(self):
+        # numpy >= 2 raises OverflowError when converting out-of-bounds Python ints;
+        # a ValueError must result on every numpy version, even without the sum check
+        with pytest.raises(ValueError):
+            RLEMask.from_counts(
+                [10 ** 10], shape=(10 ** 5, 10 ** 5), order='F', validate_sum=False)
+        with pytest.raises(ValueError):
+            RLEMask.from_counts([-5, 30], shape=(5, 5), validate_sum=False)
+
     def test_2_31_pixel_union(self):
         u = RLEMask.ones((65536, 32768)) | RLEMask.zeros((65536, 32768))
         assert u.area() == 2 ** 31
