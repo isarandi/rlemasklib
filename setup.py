@@ -92,39 +92,53 @@ def _probe_libdeflate(probe_include_dirs, probe_library_dirs):
     return True
 
 
+def _needs_native_build():
+    """Whether this setup.py invocation will compile the extensions.
+
+    Source-only commands (sdist, egg_info, dist_info, clean) must not require
+    libdeflate to be installed.
+    """
+    build_commands = {
+        "build", "build_ext", "build_clib", "bdist", "bdist_wheel",
+        "develop", "install", "install_lib", "editable_wheel",
+    }
+    return any(arg in build_commands for arg in sys.argv[1:])
+
+
 # Check for libdeflate (required for PNG-to-RLE)
-try:
-    deflate_cflags = subprocess.check_output(
-        ["pkg-config", "--cflags", "libdeflate"], stderr=subprocess.DEVNULL
-    ).decode().strip().split()
-    deflate_libs = subprocess.check_output(
-        ["pkg-config", "--libs", "libdeflate"], stderr=subprocess.DEVNULL
-    ).decode().strip().split()
-    extra_compile_args.extend(deflate_cflags)
-    extra_link_args.extend(deflate_libs)
-except (subprocess.CalledProcessError, FileNotFoundError):
-    if sys.platform == "win32":
-        # Use static lib on Windows to avoid DLL shipping
-        extra_link_args.append("deflatestatic.lib")
-    else:
-        probe_include_dirs = (
-            include_dirs
-            + _env_flag_dirs("CPPFLAGS", "-I")
-            + _env_flag_dirs("CFLAGS", "-I")
-        )
-        probe_library_dirs = library_dirs + _env_flag_dirs("LDFLAGS", "-L")
-        if _probe_libdeflate(probe_include_dirs, probe_library_dirs) is False:
-            raise SystemExit(
-                "error: libdeflate was not found (and pkg-config could not locate it).\n"
-                "rlemasklib requires libdeflate for PNG decoding. Install it, e.g.:\n"
-                "    Debian/Ubuntu:  apt install libdeflate-dev\n"
-                "    Fedora:         dnf install libdeflate-devel\n"
-                "    macOS:          brew install libdeflate\n"
-                "    conda:          conda install libdeflate\n"
-                "or set LIBDEFLATE_DIR to its install prefix, or pass its location\n"
-                "via CFLAGS=-I<include dir> and LDFLAGS=-L<lib dir>."
+if _needs_native_build():
+    try:
+        deflate_cflags = subprocess.check_output(
+            ["pkg-config", "--cflags", "libdeflate"], stderr=subprocess.DEVNULL
+        ).decode().strip().split()
+        deflate_libs = subprocess.check_output(
+            ["pkg-config", "--libs", "libdeflate"], stderr=subprocess.DEVNULL
+        ).decode().strip().split()
+        extra_compile_args.extend(deflate_cflags)
+        extra_link_args.extend(deflate_libs)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        if sys.platform == "win32":
+            # Use static lib on Windows to avoid DLL shipping
+            extra_link_args.append("deflatestatic.lib")
+        else:
+            probe_include_dirs = (
+                include_dirs
+                + _env_flag_dirs("CPPFLAGS", "-I")
+                + _env_flag_dirs("CFLAGS", "-I")
             )
-        extra_link_args.append("-ldeflate")
+            probe_library_dirs = library_dirs + _env_flag_dirs("LDFLAGS", "-L")
+            if _probe_libdeflate(probe_include_dirs, probe_library_dirs) is False:
+                raise SystemExit(
+                    "error: libdeflate was not found (and pkg-config could not locate it).\n"
+                    "rlemasklib requires libdeflate for PNG decoding. Install it, e.g.:\n"
+                    "    Debian/Ubuntu:  apt install libdeflate-dev\n"
+                    "    Fedora:         dnf install libdeflate-devel\n"
+                    "    macOS:          brew install libdeflate\n"
+                    "    conda:          conda install libdeflate\n"
+                    "or set LIBDEFLATE_DIR to its install prefix, or pass its location\n"
+                    "via CFLAGS=-I<include dir> and LDFLAGS=-L<lib dir>."
+                )
+            extra_link_args.append("-ldeflate")
 
 ext_modules = [
     Extension(

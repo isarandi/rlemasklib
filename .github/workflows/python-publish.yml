@@ -27,6 +27,9 @@ jobs:
         env:
           CIBW_BUILD: cp310-* cp311-* cp312-* cp313-*
           CIBW_SKIP: "*-musllinux_* pp* *-win32 *-manylinux_i686"
+          # numpy >= 2.3 ships no manylinux2014 wheels, so the default image would
+          # have to build numpy from source (and fail on its old GCC)
+          CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
           CIBW_TEST_REQUIRES: numpy pytest
           CIBW_TEST_COMMAND: pytest {project}/tests/test_smoke.py -v
           CIBW_BEFORE_ALL_LINUX: >
