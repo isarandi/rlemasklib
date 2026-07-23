@@ -784,3 +784,17 @@ class TestNaiveUserFixes:
             a | b
         with pytest.raises(ValueError, match=r"\(4, 5\)"):
             RLEMask.union([a, b])
+
+    def test_nonzero_matches_numpy(self):
+        rng = np.random.default_rng(0)
+        for shape in [(1, 1), (7, 3), (3, 7), (40, 60)]:
+            arr = (rng.random(shape) < 0.4).astype(np.uint8)
+            rows, cols = RLEMask.from_array(arr).nonzero()
+            np_rows, np_cols = np.nonzero(arr)
+            assert np.array_equal(rows, np_rows)
+            assert np.array_equal(cols, np_cols)
+            assert rows.dtype == np.intp and cols.dtype == np.intp
+
+    def test_nonzero_empty_mask(self):
+        rows, cols = RLEMask.zeros((5, 5)).nonzero()
+        assert rows.shape == (0,) and cols.shape == (0,)

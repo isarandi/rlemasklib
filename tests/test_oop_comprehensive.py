@@ -928,11 +928,11 @@ class TestAnalysisMetrics:
         assert iou_mat[0, 1] == 0.0
 
     def test_nonzero(self, eye3):
-        """nonzero should return foreground coordinates."""
+        """nonzero should return foreground coordinates like np.nonzero."""
         rle = RLEMask.from_array(eye3)
-        coords = rle.nonzero()
-        assert coords.shape[0] == 3  # 3 foreground pixels
-        assert coords.shape[1] == 2  # x, y
+        rows, cols = rle.nonzero()
+        assert np.array_equal(rows, [0, 1, 2])
+        assert np.array_equal(cols, [0, 1, 2])
 
     def test_any(self):
         """any should return True if any foreground pixels."""

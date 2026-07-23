@@ -458,14 +458,35 @@ class RLEMask:
         """The number of nonzero pixels in the mask, equivalent to :meth:`area`."""
         return self.cy.area()
 
-    def nonzero(self) -> np.ndarray:
-        """The indices of the nonzero elements in the mask as a 2D numpy array.
+    def nonzero(self) -> tuple[np.ndarray, np.ndarray]:
+        """The indices of the foreground pixels, as in :func:`np.nonzero <numpy.nonzero>`.
 
-        The array contains the (x, y) coordinates of the foreground pixels as an Ax2 array, where
-        A is the number of foreground pixels (foreground area).
-        The coordinate order is (x, y) or in other words, (column, row).
+        Returns:
+            A tuple of two 1D integer arrays ``(rows, cols)`` with the coordinates of the
+            foreground pixels in row-major (C) order, equivalent to
+            ``np.nonzero(np.array(mask))``.
+
+        Examples:
+            >>> mask = RLEMask.from_array(np.eye(3))
+            >>> rows, cols = mask.nonzero()
+            >>> rows
+            array([0, 1, 2])
+            >>> cols
+            array([0, 1, 2])
+
+            To get an Ax2 array of (x, y) points instead (e.g. for OpenCV), stack the
+            arrays in reversed order:
+
+            >>> np.stack(mask.nonzero()[::-1], axis=1)
+            array([[0, 0],
+                   [1, 1],
+                   [2, 2]])
         """
-        return self.cy.nonzero_indices()
+        # The Cython routine emits (x, y) pairs in this mask's column-major storage order;
+        # running it on the transpose yields (row, col) pairs in row-major order, matching
+        # np.nonzero without a sort.
+        pairs = self.transpose().cy.nonzero_indices()
+        return pairs[:, 0].astype(np.intp), pairs[:, 1].astype(np.intp)
 
     def __getitem__(
         self, key: Union[slice, tuple[slice, slice], tuple[int, int]]
