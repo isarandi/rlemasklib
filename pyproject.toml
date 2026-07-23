@@ -76,14 +76,16 @@ test = [
     "pytest",
     "numpy",
     "hypothesis",
-    "opencv-python"
+    "opencv-python",
+    "docutils"
 ]
 test-headless = [
     "pytest",
     "numpy",
     "hypothesis",
     "opencv-python-headless",
-    "scikit-image"
+    "scikit-image",
+    "docutils"
 ]
 
 [project.urls]
