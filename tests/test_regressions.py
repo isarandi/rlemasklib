@@ -684,7 +684,7 @@ class TestMorphologyOpenClose:
     def test_bad_kernel_shape_message(self):
         with pytest.raises(ValueError, match="circle"):
             RLEMask.ones((5, 5)).dilate("blob")
-        with pytest.raises(ValueError, match="kernel_shape"):
+        with pytest.raises(TypeError, match="kernel_shape"):
             RLEMask.ones((5, 5)).dilate(1)
 
 
@@ -752,3 +752,35 @@ class TestNaiveUserFixes:
             arr = np.zeros((4, 4), dt)
             m.decode_into(arr, 7)
             assert arr.max() == 7
+
+    def test_array_kernel_raises_typeerror(self):
+        # cv2 habit: cv2.erode(img, kernel); previously died with a cryptic numpy
+        # truth-value ValueError
+        kernel = np.ones((7, 7), np.uint8)
+        for method in ('erode', 'dilate', 'opening', 'closing'):
+            with pytest.raises(TypeError, match="kernel_shape"):
+                getattr(RLEMask.ones((9, 9)), method)(kernel)
+
+    def test_erode_inplace_not_corrupted_by_bad_kernel(self):
+        m = RLEMask.from_array(np.eye(5, dtype=np.uint8))
+        ref = m.copy()
+        with pytest.raises(TypeError):
+            m.erode(np.ones((3, 3)), inplace=True)
+        assert m == ref
+
+    def test_iteration_raises_typeerror(self):
+        # previously fell back to legacy __getitem__ iteration and failed with a
+        # confusing "Only 2D slicing is supported" error
+        m = RLEMask.ones((3, 3))
+        with pytest.raises(TypeError, match="not iterable"):
+            iter(m)
+        with pytest.raises(TypeError, match="not iterable"):
+            list(m)
+
+    def test_shape_mismatch_error_mentions_shapes(self):
+        a = RLEMask.zeros((4, 5))
+        b = RLEMask.zeros((6, 7))
+        with pytest.raises(ValueError, match=r"\(4, 5\).*\(6, 7\)"):
+            a | b
+        with pytest.raises(ValueError, match=r"\(4, 5\)"):
+            RLEMask.union([a, b])

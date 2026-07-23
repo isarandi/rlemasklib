@@ -865,6 +865,16 @@ class RLEMask:
             return self.cy == other.cy
         return NotImplemented
 
+    def __iter__(self):
+        """Raise TypeError: RLEMask does not support iteration.
+
+        Without this method, Python would fall back to the legacy iteration protocol via
+        :meth:`__getitem__` and fail with a confusing indexing error.
+        """
+        raise TypeError(
+            "RLEMask is not iterable. Convert to a dense array first, e.g. np.array(mask), "
+            "to iterate over rows or pixels.")
+
     def __repr__(self):
         """A string representation of the RLEMask, containing the shape and the runlengths."""
         return f"RLEMask(shape={self.shape}, counts={repr(self.cy._counts_view().tolist())})"
@@ -1490,6 +1500,7 @@ class RLEMask:
             :meth:`dilate5x5` for a 5x5 kernel.
             :meth:`erode`
         """
+        _validate_kernel_shape(kernel_shape)
         if kernel_size % 2 == 0:
             raise ValueError("Kernel size must be odd")
 
@@ -1603,6 +1614,7 @@ class RLEMask:
             :meth:`erode5x5` for a 5x5 kernel.
             :meth:`dilate`
         """
+        _validate_kernel_shape(kernel_shape)
         result = self.complement(inplace=inplace)
         result.dilate(kernel_shape, kernel_size, inplace=True)
         return result.complement(inplace=True)
@@ -2178,7 +2190,9 @@ class RLEMask:
             raise ValueError("At least one mask must be provided")
 
         if not all(m.shape == masks[0].shape for m in masks[1:]):
-            raise ValueError("All masks must have the same shape.")
+            raise ValueError(
+                f"All masks must have the same shape, got shapes "
+                f"{sorted({m.shape for m in masks})}")
 
         # plain ints are accepted too, since Boolean functions can be composed with
         # ~, & and | from BoolFunc members, which yields ints
@@ -2295,7 +2309,9 @@ class RLEMask:
                 raise ValueError(f"Expected {arity} masks, got {len(masks)}")
 
             if not all(m.shape == masks[0].shape for m in masks[1:]):
-                raise ValueError("All masks must have the same shape.")
+                raise ValueError(
+                    f"All masks must have the same shape, got shapes "
+                    f"{sorted({m.shape for m in masks})}")
 
             return RLEMask._init(RLECy.merge_many_custom([m.cy for m in masks], mbf))
 
@@ -3451,7 +3467,17 @@ class RLEMask:
 
     def _raise_if_different_shape(self, other: "RLEMask"):
         if self.shape != other.shape:
-            raise ValueError("The masks must have the same shape.")
+            raise ValueError(
+                f"The masks must have the same shape, got {self.shape} and {other.shape}.")
+
+
+def _validate_kernel_shape(kernel_shape):
+    if not isinstance(kernel_shape, str):
+        raise TypeError(
+            f"kernel_shape must be one of the strings 'circle', 'square', 'diamond', "
+            f"'cross', got {type(kernel_shape).__name__}. Arbitrary array kernels are not "
+            f"supported in morphology; see conv2d_valid for thresholded convolution with "
+            f"a custom kernel.")
 
 
 def _get_imshape(imshape=None, imsize=None):
