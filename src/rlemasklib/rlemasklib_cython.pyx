@@ -183,6 +183,23 @@ def _to_uncompressed_dicts(RLEs Rs):
 def decompress(rleObjs):
     return _to_uncompressed_dicts(_from_leb128_dicts(rleObjs))
 
+cdef _ascontiguous_uint32(obj, str what):
+    # Casting out-of-range Python ints with a forced uint32 dtype raises OverflowError on
+    # numpy >= 2 and silently wraps on numpy 1; validate the range for a clean ValueError
+    # on every numpy version.
+    try:
+        arr = np.ascontiguousarray(obj)
+    except OverflowError:
+        raise ValueError(
+            f"{what} must be non-negative integers that fit in uint32") from None
+    if arr.dtype != np.uint32:
+        if arr.dtype.kind not in "iufb" or np.any((arr < 0) | (arr > 0xFFFFFFFF)):
+            raise ValueError(
+                f"{what} must be non-negative integers that fit in uint32")
+        arr = np.ascontiguousarray(arr, dtype=np.uint32)
+    return arr
+
+
 # internal conversion from RLE dicts (counts, zcounts or ucounts) to Python RLEs object
 def _from_leb128_dicts(rleObjs):
     cdef siz n = len(rleObjs)
@@ -207,7 +224,7 @@ def _from_leb128_dicts(rleObjs):
                 raise ValueError(
                     "Invalid RLE string: sum of run lengths does not match h*w")
         elif 'ucounts' in obj:
-            ucounts = np.ascontiguousarray(obj['ucounts'], dtype=np.uint32)
+            ucounts = _ascontiguous_uint32(obj['ucounts'], "ucounts")
             if ucounts.sum() != h * w:
                 raise ValueError(
                     f'Invalid RLE: Sum of runlengths is {ucounts.sum()}, which does not match the '
@@ -271,7 +288,7 @@ def _from_uncompressed_dicts(rleObjs):
     cdef np.ndarray[np.uint32_t, ndim=1] counts
     cdef siz h, w
     for i, obj in enumerate(rleObjs):
-        counts = np.ascontiguousarray(obj['ucounts'], dtype=np.uint32)
+        counts = _ascontiguous_uint32(obj['ucounts'], "ucounts")
         h, w = obj['size'][0], obj['size'][1]
         if h > 0xFFFFFFFF or w > 0xFFFFFFFF or h * w > 0xFFFFFFFF:
             raise ValueError(
@@ -492,7 +509,7 @@ def frUncompressedRLE(ucRles):
     objs = []
     for i in range(n):
         Rs = RLEs(1)
-        cnts = np.ascontiguousarray(ucRles[i]['ucounts'], dtype=np.uint32)
+        cnts = _ascontiguous_uint32(ucRles[i]['ucounts'], "ucounts")
         h = ucRles[i]['size'][0]
         w = ucRles[i]['size'][1]
         if cnts.sum() != h * w:

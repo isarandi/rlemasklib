@@ -247,6 +247,23 @@ def _check_shape_domain(h, w):
             f"({int(h) * int(w)} pixels)")
 
 
+cdef _ascontiguous_uint32(obj, str what):
+    # Casting out-of-range Python ints with a forced uint32 dtype raises OverflowError on
+    # numpy >= 2 and silently wraps on numpy 1; validate the range for a clean ValueError
+    # on every numpy version.
+    try:
+        arr = np.ascontiguousarray(obj)
+    except OverflowError:
+        raise ValueError(
+            f"{what} must be non-negative integers that fit in uint32") from None
+    if arr.dtype != np.uint32:
+        if arr.dtype.kind not in "iufb" or np.any((arr < 0) | (arr > 0xFFFFFFFF)):
+            raise ValueError(
+                f"{what} must be non-negative integers that fit in uint32")
+        arr = np.ascontiguousarray(arr, dtype=np.uint32)
+    return arr
+
+
 cdef _raise_if_rle_error():
     # Turn a deferred C-layer merge error (e.g. inputs with mismatched run-length sums,
     # reachable only via the explicitly unsafe APIs) into a catchable Python exception.
@@ -300,7 +317,7 @@ cdef class RLECy:
 
     def _i_from_counts(self, shape: Sequence[int], counts: np.ndarray, order: str):
         _check_shape_domain(shape[0], shape[1])
-        counts = np.ascontiguousarray(counts, dtype=np.uint32)
+        counts = _ascontiguous_uint32(counts, "Run-length counts")
         cdef uint[::1] data = counts
         cdef RLE tmp
         if len(data) > 0:
@@ -374,7 +391,7 @@ cdef class RLECy:
                 raise ValueError(
                     "Invalid RLE string: sum of run lengths does not match h*w")
         elif 'ucounts' in d:
-            ucounts = np.ascontiguousarray(d["ucounts"], dtype=np.uint32)
+            ucounts = _ascontiguous_uint32(d["ucounts"], "ucounts")
             if ucounts.sum() != h * w:
                 raise ValueError(
                     f'Invalid RLE: Sum of runlengths is {ucounts.sum()}, which does not match '

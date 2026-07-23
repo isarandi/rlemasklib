@@ -403,6 +403,20 @@ class TestLargeMasks:
         with pytest.raises(ValueError):
             RLEMask.from_counts([-5, 30], shape=(5, 5), validate_sum=False)
 
+    def test_ucounts_beyond_uint32_raise_cleanly(self):
+        # [2**32 + 20, 5] wraps to the plausible [20, 5] on numpy 1 (silently accepted
+        # as corrupt data) and raises OverflowError on numpy 2; both the OOP and the
+        # functional dict paths must give a clean ValueError instead
+        bad = {'size': [5, 5], 'ucounts': [2 ** 32 + 20, 5]}
+        with pytest.raises(ValueError):
+            RLEMask.from_dict(bad)
+        with pytest.raises(ValueError):
+            rlemasklib.area(bad)
+        with pytest.raises(ValueError):
+            rlemasklib.compress(bad)
+        with pytest.raises(ValueError):
+            RLEMask.from_dict({'size': [5, 5], 'ucounts': [-7, 32]})
+
     def test_2_31_pixel_union(self):
         u = RLEMask.ones((65536, 32768)) | RLEMask.zeros((65536, 32768))
         assert u.area() == 2 ** 31
