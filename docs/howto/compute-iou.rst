@@ -41,3 +41,14 @@ If you need the intersection and union areas separately::
     union = mask1 | mask2
 
     iou = intersection.area() / union.area() if union.area() > 0 else 0.0
+
+COCO's "crowd" IoU
+------------------
+
+``pycocotools`` computes a modified IoU against crowd regions (``iscrowd=1``),
+dividing by the detection's area instead of the union. rlemasklib is a
+general-purpose mask library and does not special-case this, but it is a
+one-liner::
+
+    # Fraction of the detection covered by the crowd region
+    iou_crowd = (dt & gt).area() / dt.area() if dt.area() > 0 else 0.0

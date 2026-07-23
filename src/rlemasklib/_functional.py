@@ -317,7 +317,7 @@ def iou(masks):
     """Compute the intersection-over-union (IoU) between the input masks.
 
     This is typically used with two input masks, but more are also supported, in which case the
-    IoU as the ratio between the overall intersection and the overall union.
+    IoU is computed as the ratio between the overall intersection and the overall union.
 
     Args:
         masks: a list of RLE masks
@@ -342,7 +342,7 @@ def to_bbox(rleObjs):
 
     Returns:
         bbox(es): either a single bounding box or a list of bounding boxes, in the format
-            [x_start, y_start, width, height]
+            [x_start, y_start, width, height], as float32 numpy array(s)
     """
     if isinstance(rleObjs, (tuple, list)):
         return rlemasklib_cython.toBbox(rleObjs).astype(np.float32)

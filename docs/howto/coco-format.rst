@@ -50,6 +50,21 @@ For batch operations without creating objects::
     union_dict = rlemasklib.merge([dict1, dict2], BoolFunc.UNION)
     intersection_dict = rlemasklib.merge([dict1, dict2], BoolFunc.INTERSECTION)
 
+JSON serialization
+------------------
+
+The ``counts`` value is a ``bytes`` object, which ``json.dumps`` cannot
+serialize. Decode it to ``str`` first::
+
+    import json
+
+    d = mask.to_dict()
+    d["counts"] = d["counts"].decode("ascii")
+    json_str = json.dumps(d)
+
+Loading needs no special handling: ``from_dict`` accepts both ``str`` and
+``bytes`` counts, so ``RLEMask.from_dict(json.loads(json_str))`` just works.
+
 Uncompressed counts
 -------------------
 

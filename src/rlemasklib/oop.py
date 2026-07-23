@@ -75,7 +75,7 @@ class RLEMask:
 
     @staticmethod
     def from_counts(
-        counts: Sequence[int],
+        counts: Union[Sequence[int], np.ndarray],
         shape: Sequence[int],
         order="F",
         validate_sum: bool = True,
@@ -1996,7 +1996,10 @@ class RLEMask:
             aspect_ratio: the desired aspect ratio of the rectangle (width/height)
 
         Returns:
-            An array (x, y, width, height) of the top-left corner and dimensions of the rectangle.
+            A float32 array (x, y, width, height) of the top-left corner and dimensions of
+            the rectangle. The values are whole numbers when `aspect_ratio` is not given,
+            and generally fractional otherwise; convert with e.g. ``.astype(int)`` before
+            using them as array indices.
 
         Examples:
             Find the largest rectangle inside an L-shape (red outline shows result):
@@ -2045,7 +2048,9 @@ class RLEMask:
             aspect_ratio: the desired aspect ratio of the rectangle (width/height)
 
         Returns:
-            An array (x, y, width, height) of the top-left corner and dimensions of the rectangle.
+            A float32 array (x, y, width, height) of the top-left corner and dimensions of
+            the rectangle. The values are whole numbers when `aspect_ratio` is not given,
+            and generally fractional otherwise.
 
         Examples:
             Find the largest rectangle centered on a specific point (red outline shows result):
@@ -2833,7 +2838,9 @@ class RLEMask:
             inplace: whether to perform the operation in place or to return a new object
 
         Returns:
-            A tuple consisting of the cropped mask and the box.
+            A tuple consisting of the cropped mask and the box, the latter as an integer
+            numpy array [x, y, width, height]. (Note that :meth:`bbox` returns the box as
+            float32 instead.)
 
         Examples:
             .. mask-demo::

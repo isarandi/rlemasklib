@@ -11,7 +11,10 @@ Basic usage
 
     bbox = mask.bbox()  # Returns [x, y, width, height]
 
-The format matches COCO's bounding box convention.
+The format matches COCO's bounding box convention. The result is a float32
+array whose values are whole numbers; convert with ``.astype(int)`` if you
+need integer coordinates (``tight_crop`` below returns an integer box
+directly).
 
 Components
 ----------

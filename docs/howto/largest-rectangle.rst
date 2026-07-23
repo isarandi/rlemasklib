@@ -12,7 +12,9 @@ Basic usage
     bbox = mask.largest_interior_rectangle()
     x, y, w, h = bbox
 
-Returns ``[x, y, width, height]`` of the largest rectangle.
+Returns ``[x, y, width, height]`` of the largest rectangle, as a float array.
+Without an aspect ratio constraint the values are whole numbers; with one they
+are generally fractional.
 
 With aspect ratio constraint
 ----------------------------
@@ -51,7 +53,8 @@ Find the best crop that avoids black borders::
     # valid_mask marks pixels that have real data (not border fill)
     crop_box = valid_mask.largest_interior_rectangle(aspect_ratio=16/9)
 
-    x, y, w, h = crop_box
+    # The box is a float array; convert to int before slicing
+    x, y, w, h = crop_box.astype(int)
     cropped_image = image[y:y+h, x:x+w]
 
 Use case: undistortion

@@ -59,7 +59,7 @@ mask = RLEMask.from_dict(coco_dict)
 ## Features
 
 - **Boolean operations**: union, intersection, difference, complement, XOR, custom functions
-- **Morphology**: erode, dilate, open, close (3x3, 5x5, arbitrary kernels)
+- **Morphology**: erode, dilate, open, close (circle/square/diamond/cross kernels of any size)
 - **Geometric**: crop, pad, tile, flip, transpose, rotate, resize, warp (affine/perspective)
 - **Analysis**: area, bounding box, connected components, largest interior rectangle, IoU
 - **I/O**: COCO format, numpy arrays, polygons, bounding boxes, circles

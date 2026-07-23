@@ -75,7 +75,10 @@ using doubling::
 
 This gives dilation by k in O(log k) operations instead of O(k).
 
-The library uses this for large kernels.
+For the separable square and cross kernels there is an even better option:
+the O(runs) vertical-dilation primitive, applied to the mask and its
+transpose, has cost independent of the kernel size altogether. The library
+uses this separable approach for larger square and cross kernels.
 
 Erosion via complement
 ----------------------
@@ -135,19 +138,34 @@ Both are O(runs) for fixed kernel sizes.
 For removing regions smaller than a threshold, connected component analysis
 with size filtering is often more appropriate than morphological opening.
 
-Arbitrary structuring elements
-------------------------------
+Non-separable kernel shapes
+---------------------------
 
-For non-rectangular kernels, the library falls back to a general approach:
+The circle and diamond kernels are not separable, so ``erode``/``dilate``
+decompose them by columns: each kernel column is a vertical segment, so the
+mask is vertically dilated per distinct column height, shifted horizontally
+into place, and the shifted copies are OR-ed together.
 
-1. For each pixel in the structuring element, compute the shifted mask
-2. Combine all shifted masks with OR (dilation) or AND (erosion)
+Cost: O(kernel_width × runs). Efficient for the moderate kernel sizes typical
+in mask processing.
 
-Cost: O(kernel_nonzero_pixels × runs). Efficient for small sparse kernels,
-but grows linearly with kernel complexity.
+Arbitrary structuring elements (any 0/1 array) are not part of the public
+morphology API — only the named shapes ``'circle'``, ``'square'``,
+``'diamond'`` and ``'cross'`` are. General weighted kernels are available
+through thresholded convolution (``conv2d_valid``), and for very large dense
+kernels the dense approach (decode, filter with OpenCV, re-encode) may be
+faster.
 
-Very large or dense kernels might be faster with the dense approach.
-The library doesn't automatically switch; choose based on your use case.
+OpenCV parity
+-------------
+
+The ``'square'`` kernel matches OpenCV's ``cv2.MORPH_RECT`` exactly:
+eroding or dilating with ``kernel_shape='square'`` gives pixel-identical
+results to ``cv2.erode``/``cv2.dilate`` with a rectangular structuring
+element of the same size. The ``'circle'`` kernel contains the pixels within
+Euclidean distance ``kernel_size / 2`` of the center, which differs slightly
+from ``cv2.MORPH_ELLIPSE``'s rasterization, so results can differ in a thin
+ring of boundary pixels.
 
 Run count growth
 ----------------
