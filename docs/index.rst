@@ -171,9 +171,9 @@ Erosion and dilation are supported with different kernel sizes and connectivity 
 
    [A]:      [B]:
    .....     .....
-   .....     .###.
+   .....     ..#..
    ..#..     .###.
-   .....     .###.
+   .....     ..#..
    .....     .....
 
 .. code-block:: python
