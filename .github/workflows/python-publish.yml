@@ -30,6 +30,9 @@ jobs:
           # numpy >= 2.3 ships no manylinux2014 wheels, so the default image would
           # have to build numpy from source (and fail on its old GCC)
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
+          # cmake installs libdeflate to /usr/local/lib64 on this EL8-based image,
+          # which is not on the default loader path that auditwheel searches
+          CIBW_ENVIRONMENT_LINUX: LD_LIBRARY_PATH=/usr/local/lib:/usr/local/lib64:$LD_LIBRARY_PATH
           CIBW_TEST_REQUIRES: numpy pytest
           CIBW_TEST_COMMAND: pytest {project}/tests/test_smoke.py -v
           CIBW_BEFORE_ALL_LINUX: >
