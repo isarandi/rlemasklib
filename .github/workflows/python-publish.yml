@@ -15,7 +15,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # macos-latest is Apple Silicon only; macos-15-intel builds the Intel-Mac wheels
+        os: [ubuntu-latest, macos-latest, macos-15-intel, windows-latest]
 
     steps:
       - uses: actions/checkout@v4
@@ -59,6 +60,8 @@ jobs:
             cmake --build build --config Release --parallel &&
             cmake --install build --config Release
           CIBW_ENVIRONMENT_WINDOWS: LIBDEFLATE_DIR=C:/libdeflate
+          # The same minimum macOS as the libdeflate build above (Intel and Apple Silicon)
+          CIBW_ENVIRONMENT_MACOS: MACOSX_DEPLOYMENT_TARGET=11.0
 
       - uses: actions/upload-artifact@v4
         with:
